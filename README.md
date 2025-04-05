@@ -22,8 +22,8 @@ Connect Lumentree solar inverter to Home Asstistant
 - ...
 
 # Tương lai
-- Thực hiện thay đổi cài đặt khả dụng.
-- Sử dụng ESP32 để đọc và cài đặt Biến tần của bạn tại địa phương (không cần kết nối với máy chủ Lumentree, không cần internet)
+- Thực hiện thay đổi cài đặt biến tần bằng HA.
+- Sử dụng ESP32 để đọc và cài đặt Biến tần (không cần kết nối với máy chủ Lumentree, không cần internet)
 - ...
 
 * Bạn nào có hứng thú thì cùng nghiên cứu với mình nhé!!!
