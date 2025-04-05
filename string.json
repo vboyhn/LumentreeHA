@@ -1,356 +1,44 @@
 {
-  "title": "Lumentree Inverter",
   "config": {
     "step": {
       "user": {
         "title": "Select Authentication Method",
-        "description": "Currently, only Guest authentication is supported.",
         "data": {
-          "auth_method": "Authentication method"
+          "auth_method": "Authentication Method"
+        }
+      },
+      "credentials": {
+        "title": "Enter Credentials",
+        "data": {
+          "username": "[%key:common::config_flow::data::username%]",
+          "password": "[%key:common::config_flow::data::password%]"
         }
       },
       "guest": {
-        "title": "Guest Authentication",
-        "description": "Paste the content of the QR code generated from the Lumentree app below.\n\nExample: `{qr_example}`",
+        "title": "Enter Guest Login Details",
+        "description": "Paste the full content of the QR code JSON here.\nExample: {qr_example}",
         "data": {
-          "qr_content": "QR Code Content"
+          "qr_content": "QR Code Content (JSON)"
         }
       },
-      "confirm_device": {
-        "title": "Confirm Device",
-        "description": "Lumentree device found!\n\n**Name:** {device_name}\n**SN/ID:** {device_sn}\n\nPress SUBMIT to finish adding the device.",
-        "data": {}
+      "select_device": {
+        "title": "Select Device",
+        "description": "Choose the Light Earth device you want to add to Home Assistant.",
+        "data": {
+          "device_id": "Device"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to the Lumentree API. Check network connection.",
-      "invalid_guest_auth": "Invalid Guest authentication. Check the QR code content or it might have expired.",
-      "cannot_connect_deviceinfo": "Could not fetch device info after login. Check network connection or token.",
-      "unknown": "An unknown error occurred."
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "invalid_guest_auth": "Guest authentication failed. Check QR code content and expiry.",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "no_devices": "No devices found for this account, or failed to parse the device list.",
+      "device_not_found": "Selected device could not be found. Please try again.",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
-      "already_configured": "Device with this Serial Number (SN) or Device ID is already configured.",
-      "reauth_successful": "Re-authentication was successful",
-      "missing_device_id": "Could not find Device ID from QR code or login process."
-    }
-  },
-  "entity": {
-    "sensor": {
-      "pv_power": {
-        "name": "PV Power"
-      },
-      "battery_power": {
-        "name": "Battery Power (Absolute)"
-      },
-      "battery_soc": {
-        "name": "Battery SOC"
-      },
-      "grid_power": {
-        "name": "Grid Power"
-      },
-      "load_power": {
-        "name": "Load Power"
-      },
-      "battery_voltage": {
-        "name": "Battery Voltage"
-      },
-      "battery_current": {
-        "name": "Battery Current"
-      },
-      "ac_output_voltage": {
-        "name": "AC Output Voltage"
-      },
-      "grid_voltage": {
-        "name": "Grid Voltage"
-      },
-      "ac_output_frequency": {
-        "name": "AC Output Frequency"
-      },
-      "ac_output_power": {
-        "name": "AC Output Power"
-      },
-      "ac_output_va": {
-        "name": "AC Output Apparent Power"
-      },
-      "device_temperature": {
-        "name": "Device Temperature"
-      },
-      "pv1_voltage": {
-        "name": "PV1 Voltage"
-      },
-      "pv1_power": {
-        "name": "PV1 Power"
-      },
-      "pv2_voltage": {
-        "name": "PV2 Voltage"
-      },
-      "pv2_power": {
-        "name": "PV2 Power"
-      },
-      "last_raw_mqtt_hex": {
-        "name": "Last Raw MQTT Hex"
-      },
-      "pv_today": {
-        "name": "PV Generation Today"
-      },
-      "charge_today": {
-        "name": "Battery Charge Today"
-      },
-      "discharge_today": {
-        "name": "Battery Discharge Today"
-      },
-      "grid_in_today": {
-        "name": "Grid Input Today"
-      },
-      "load_today": {
-        "name": "Load Consumption Today"
-      }
-    },
-    "binary_sensor": {
-        "online_status": {
-            "name": "Online Status"
-        },
-        "is_ups_mode": {
-            "name": "UPS Mode"
-        }
-    }
-  },
-  "translations": {
-    "en": {
-      "title": "Lumentree Inverter",
-      "config": {
-        "step": {
-          "user": {
-            "title": "Select Authentication Method",
-            "description": "Currently, only Guest authentication is supported.",
-            "data": {
-              "auth_method": "Authentication method"
-            }
-          },
-          "guest": {
-            "title": "Guest Authentication",
-            "description": "Paste the content of the QR code generated from the Lumentree app below.\n\nExample: `{qr_example}`",
-            "data": {
-              "qr_content": "QR Code Content"
-            }
-          },
-          "confirm_device": {
-            "title": "Confirm Device",
-            "description": "Lumentree device found!\n\n**Name:** {device_name}\n**SN/ID:** {device_sn}\n\nPress SUBMIT to finish adding the device.",
-            "data": {}
-          }
-        },
-        "error": {
-          "cannot_connect": "Unable to connect to the Lumentree API. Check network connection.",
-          "invalid_guest_auth": "Invalid Guest authentication. Check the QR code content or it might have expired.",
-          "cannot_connect_deviceinfo": "Could not fetch device info after login. Check network connection or token.",
-          "unknown": "An unknown error occurred."
-        },
-        "abort": {
-          "already_configured": "Device with this Serial Number (SN) or Device ID is already configured.",
-          "reauth_successful": "Re-authentication was successful",
-          "missing_device_id": "Could not find Device ID from QR code or login process."
-        }
-      },
-      "entity": {
-        "sensor": {
-          "pv_power": {
-            "name": "PV Power"
-          },
-          "battery_power": {
-            "name": "Battery Power (Absolute)"
-          },
-          "battery_soc": {
-            "name": "Battery SOC"
-          },
-          "grid_power": {
-            "name": "Grid Power"
-          },
-          "load_power": {
-            "name": "Load Power"
-          },
-          "battery_voltage": {
-            "name": "Battery Voltage"
-          },
-          "battery_current": {
-            "name": "Battery Current"
-          },
-          "ac_output_voltage": {
-            "name": "AC Output Voltage"
-          },
-          "grid_voltage": {
-            "name": "Grid Voltage"
-          },
-          "ac_output_frequency": {
-            "name": "AC Output Frequency"
-          },
-          "ac_output_power": {
-            "name": "AC Output Power"
-          },
-          "ac_output_va": {
-            "name": "AC Output Apparent Power"
-          },
-          "device_temperature": {
-            "name": "Device Temperature"
-          },
-          "pv1_voltage": {
-            "name": "PV1 Voltage"
-          },
-          "pv1_power": {
-            "name": "PV1 Power"
-          },
-          "pv2_voltage": {
-            "name": "PV2 Voltage"
-          },
-          "pv2_power": {
-            "name": "PV2 Power"
-          },
-          "last_raw_mqtt_hex": {
-            "name": "Last Raw MQTT Hex"
-          },
-          "pv_today": {
-            "name": "PV Generation Today"
-          },
-          "charge_today": {
-            "name": "Battery Charge Today"
-          },
-          "discharge_today": {
-            "name": "Battery Discharge Today"
-          },
-          "grid_in_today": {
-            "name": "Grid Input Today"
-          },
-          "load_today": {
-            "name": "Load Consumption Today"
-          }
-        },
-        "binary_sensor": {
-            "online_status": {
-                "name": "Online Status"
-            },
-            "is_ups_mode": {
-                "name": "UPS Mode"
-            }
-        }
-      }
-    },
-    "vi": {
-      "title": "Lumentree Inverter",
-      "config": {
-        "step": {
-          "user": {
-            "title": "Chọn Phương thức Xác thực",
-            "description": "Hiện tại chỉ hỗ trợ phương thức Guest.",
-            "data": {
-              "auth_method": "Phương thức xác thực"
-            }
-          },
-          "guest": {
-            "title": "Xác thực Guest",
-            "description": "Dán nội dung mã QR bạn đã tạo từ ứng dụng Lumentree vào ô dưới đây.\n\nVí dụ: `{qr_example}`",
-            "data": {
-              "qr_content": "Nội dung mã QR"
-            }
-          },
-          "confirm_device": {
-            "title": "Xác nhận Thiết bị",
-            "description": "Đã tìm thấy thiết bị Lumentree!\n\n**Tên:** {device_name}\n**SN/ID:** {device_sn}\n\nNhấn SUBMIT để hoàn tất thêm thiết bị.",
-            "data": {}
-          }
-        },
-        "error": {
-          "cannot_connect": "Không thể kết nối đến API Lumentree. Kiểm tra kết nối mạng.",
-          "invalid_guest_auth": "Xác thực Guest không hợp lệ. Kiểm tra lại nội dung mã QR hoặc mã QR đã hết hạn.",
-          "cannot_connect_deviceinfo": "Không thể lấy thông tin thiết bị sau khi đăng nhập. Kiểm tra kết nối mạng hoặc token.",
-          "unknown": "Lỗi không xác định xảy ra."
-        },
-        "abort": {
-          "already_configured": "Thiết bị với số Serial Number (SN) hoặc Device ID này đã được cấu hình.",
-          "reauth_successful": "Xác thực lại thành công",
-          "missing_device_id": "Không tìm thấy Device ID từ mã QR hoặc quá trình đăng nhập."
-        }
-      },
-      "entity": {
-        "sensor": {
-          "pv_power": {
-            "name": "Công suất PV"
-          },
-          "battery_power": {
-            "name": "Công suất Pin (Tuyệt đối)"
-          },
-          "battery_soc": {
-            "name": "Dung lượng Pin (SOC)"
-          },
-          "grid_power": {
-            "name": "Công suất Lưới"
-          },
-          "load_power": {
-            "name": "Công suất Tải"
-          },
-          "battery_voltage": {
-            "name": "Điện áp Pin"
-          },
-          "battery_current": {
-            "name": "Dòng điện Pin"
-          },
-          "ac_output_voltage": {
-            "name": "Điện áp AC Ngõ ra"
-          },
-          "grid_voltage": {
-            "name": "Điện áp Lưới"
-          },
-          "ac_output_frequency": {
-            "name": "Tần số AC Ngõ ra"
-          },
-          "ac_output_power": {
-            "name": "Công suất AC Ngõ ra"
-          },
-          "ac_output_va": {
-            "name": "Công suất biểu kiến AC Ngõ ra"
-          },
-          "device_temperature": {
-            "name": "Nhiệt độ Thiết bị"
-          },
-          "pv1_voltage": {
-            "name": "Điện áp PV1"
-          },
-          "pv1_power": {
-            "name": "Công suất PV1"
-          },
-          "pv2_voltage": {
-            "name": "Điện áp PV2"
-          },
-          "pv2_power": {
-            "name": "Công suất PV2"
-          },
-          "last_raw_mqtt_hex": {
-            "name": "Dữ liệu MQTT Hex cuối"
-          },
-          "pv_today": {
-            "name": "Sản lượng PV hôm nay"
-          },
-          "charge_today": {
-            "name": "Pin đã sạc hôm nay"
-          },
-          "discharge_today": {
-            "name": "Pin đã xả hôm nay"
-          },
-          "grid_in_today": {
-            "name": "Điện lưới đã lấy hôm nay"
-          },
-          "load_today": {
-            "name": "Tải tiêu thụ hôm nay"
-          }
-        },
-        "binary_sensor": {
-            "online_status": {
-                "name": "Trạng thái Online"
-            },
-            "is_ups_mode": {
-                "name": "Chế độ UPS"
-            }
-        }
-      }
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
     }
   }
 }
