@@ -41,8 +41,8 @@ CONF_HTTP_TOKEN: Final = "http_token" # Key lưu token HTTP
 AUTH_METHOD_GUEST: Final = "guest"
 
 # --- Polling and Timeout ---
-DEFAULT_POLLING_INTERVAL = 15 # Giây (MQTT Real-time)
-DEFAULT_STATS_INTERVAL = 1800 # Giây (30 phút cho HTTP Stats)
+DEFAULT_POLLING_INTERVAL = 5 # Giây (MQTT Real-time)
+DEFAULT_STATS_INTERVAL = 30 # Giây (30 phút cho HTTP Stats)
 HTTPS_PING_TIMEOUT = 5 # Giây (Không còn dùng trong init nhưng giữ lại const)
 
 # --- Dispatcher Signal ---
