@@ -5,13 +5,13 @@ Connect Lumentree solar inverter to Home Asstistant
 
 
 # How to use: 
- - Copy all file to 'lumentree' folder in your 'custom_components' folder
+ - Copy 'lumentree' folder to your 'custom_components' folder
  - Reboot your HA
  - Add device lumentree, use QR code contents to login.
  - How to get QR code? Go to your LighEarth WIFI app -> Share -> Select your device want to share, and click share you will get a QR code, use qrcode scanner to know content and use this content for login.
   
 # Cách sử dụng:
-- Sao chép tất cả các tệp vào thư mục 'lumentree' trong thư mục 'custom_components' của bạn
+- Sao chép thư mục 'lumentree' vào trong thư mục 'custom_components' của bạn
 - Khởi động lại HA của bạn
 - Thêm thiết bị lumentree, sử dụng nội dung mã QR để đăng nhập.
 - Làm thế nào để lấy mã QR? Truy cập ứng dụng LighEarth WIFI của bạn -> Chia sẻ -> Chọn thiết bị bạn muốn chia sẻ và nhấp vào chia sẻ, bạn sẽ nhận được mã QR, sử dụng máy quét mã QR để biết nội dung và sử dụng nội dung này để đăng nhập.
