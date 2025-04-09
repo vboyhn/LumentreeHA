@@ -15,7 +15,7 @@ URL_GET_PV_DAY_DATA = "/lesvr/getPVDayData"
 URL_GET_BAT_DAY_DATA = "/lesvr/getBatDayData"
 
 DEFAULT_HEADERS: Final = {
-    "versionCode": "100", "platform": "2", "wifiStatus": "1",
+    "versionCode": "1.7.0", "platform": "2", "wifiStatus": "1",
     "User-Agent": "okhttp/3.12.0", "Accept": "application/json, text/plain, */*"
 }
 
