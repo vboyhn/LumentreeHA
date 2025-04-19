@@ -1,0 +1,298 @@
+{
+    "title": "Lumentree Inverter",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Lumentree Device Authentication",
+                "description": "Please enter the **Device ID** of your Lumentree inverter.\n\nYou can usually find the Device ID on the label of the inverter or within the mobile app.",
+                "data": { "device_id": "Device ID" }
+            },
+            "confirm_device": {
+                "title": "Confirm Device",
+                "description": "Lumentree device found!\n\n**Name:** {device_name}\n**ID (SN):** {device_sn}\n\nPress SUBMIT to finish adding the device.",
+                "data": {}
+            }
+        },
+        "error": {
+            "cannot_connect": "Unable to connect to the Lumentree API. Check network connection.",
+            "invalid_auth": "Authentication failed. Check the Device ID or the API might be temporarily unavailable. Token might be expired.",
+            "cannot_connect_deviceinfo": "Could not fetch device info after authentication. Check network connection or API status.",
+            "token_missing": "Internal error: Authentication token is missing.",
+            "unknown": "An unknown error occurred."
+        },
+        "abort": {
+            "already_configured": "Device with this ID (SN: {device_sn}) is already configured.",
+            "reauth_successful": "Re-authentication was successful",
+            "missing_device_id": "Cannot reauthenticate: Device ID missing in existing configuration.",
+            "unknown_entry": "Cannot reauthenticate: Configuration entry not found.",
+            "auth_failed_reauth": "Re-authentication failed. Please check the Device ID."
+        }
+    },
+    "entity": {
+        "sensor": {
+            "pv_power": { "name": "PV Power" },
+            "battery_power": { "name": "Battery Power (Absolute)" },
+            "battery_soc": { "name": "Battery SOC" },
+            "grid_power": { "name": "Grid Power" },
+            "load_power": { "name": "Load Power" },
+            "battery_voltage": { "name": "Battery Voltage" },
+            "battery_current": { "name": "Battery Current" },
+            "ac_output_voltage": { "name": "AC Output Voltage" },
+            "grid_voltage": { "name": "Grid Voltage" },
+            "ac_output_frequency": { "name": "AC Output Frequency" },
+            "ac_output_power": { "name": "AC Output Power" },
+            "ac_output_va": { "name": "AC Output Apparent Power" },
+            "device_temperature": { "name": "Device Temperature" },
+            "pv1_voltage": { "name": "PV1 Voltage" },
+            "pv1_power": { "name": "PV1 Power" },
+            "pv2_voltage": { "name": "PV2 Voltage" },
+            "pv2_power": { "name": "PV2 Power" },
+            "last_raw_mqtt_hex": { "name": "Last Raw MQTT Hex" },
+            "pv_today": { "name": "PV Generation Today" },
+            "charge_today": { "name": "Battery Charge Today" },
+            "discharge_today": { "name": "Battery Discharge Today" },
+            "grid_in_today": { "name": "Grid Input Today" },
+            "load_today": { "name": "Load Consumption Today" },
+            "battery_status": { "name": "Battery Status" },
+            "grid_status": { "name": "Grid Status" },
+            "ac_input_voltage": { "name": "AC Input Voltage" },
+            "ac_input_frequency": { "name": "AC Input Frequency" },
+            "ac_input_power": { "name": "AC Input Power" },
+            "battery_type": { "name": "Battery Type" },
+            "battery_mode": { "name": "Battery Mode" },
+            "work_mode": { "name": "Work Mode" },
+            "master_slave_status": { "name": "Master/Slave Status" },
+            "beep_mode": { "name": "Beep Mode" },
+            "backlight_mode": { "name": "Backlight Mode" },
+            "mqtt_device_sn": { "name": "Device SN (MQTT)" },
+            "battery_cell_info": { "name": "Battery Cell Info" }
+        },
+        "binary_sensor": {
+            "online_status": { "name": "Online Status" },
+            "is_ups_mode": { "name": "UPS Mode" }
+        }
+    },
+    "translations": {
+        "vi": {
+            "title": "Lumentree Inverter",
+            "config": {
+                "step": {
+                    "user": {
+                        "title": "Xác thực Thiết bị Lumentree",
+                        "description": "Vui lòng nhập **Device ID** của bộ biến tần Lumentree.\n\nBạn thường có thể tìm thấy Device ID trên nhãn của biến tần hoặc trong ứng dụng di động.",
+                        "data": { "device_id": "Device ID" }
+                    },
+                    "confirm_device": {
+                        "title": "Xác nhận Thiết bị",
+                        "description": "Đã tìm thấy thiết bị Lumentree!\n\n**Tên:** {device_name}\n**ID (SN):** {device_sn}\n\nNhấn SUBMIT để hoàn tất thêm thiết bị.",
+                        "data": {}
+                    }
+                },
+                "error": {
+                    "cannot_connect": "Không thể kết nối đến API Lumentree. Kiểm tra kết nối mạng.",
+                    "invalid_auth": "Xác thực thất bại. Kiểm tra lại Device ID hoặc API tạm thời không khả dụng. Token có thể đã hết hạn.",
+                    "cannot_connect_deviceinfo": "Không thể lấy thông tin thiết bị sau khi xác thực. Kiểm tra kết nối mạng hoặc trạng thái API.",
+                    "token_missing": "Lỗi nội bộ: Thiếu token xác thực.",
+                    "unknown": "Lỗi không xác định xảy ra."
+                 },
+                "abort": {
+                    "already_configured": "Thiết bị với ID này (SN: {device_sn}) đã được cấu hình.",
+                    "reauth_successful": "Xác thực lại thành công",
+                    "missing_device_id": "Không thể xác thực lại: Thiếu Device ID trong cấu hình hiện tại.",
+                    "unknown_entry": "Không thể xác thực lại: Không tìm thấy cấu hình.",
+                    "auth_failed_reauth": "Xác thực lại thất bại. Vui lòng kiểm tra Device ID."
+                }
+            },
+            "entity": {
+                "sensor": {
+                    "pv_power": { "name": "Công suất PV" },
+                    "battery_power": { "name": "Công suất Pin (Tuyệt đối)" },
+                    "battery_soc": { "name": "Dung lượng Pin (SOC)" },
+                    "grid_power": { "name": "Công suất Lưới" },
+                    "load_power": { "name": "Công suất Tải" },
+                    "battery_voltage": { "name": "Điện áp Pin" },
+                    "battery_current": { "name": "Dòng điện Pin" },
+                    "ac_output_voltage": { "name": "Điện áp AC Ngõ ra" },
+                    "grid_voltage": { "name": "Điện áp Lưới" },
+                    "ac_output_frequency": { "name": "Tần số AC Ngõ ra" },
+                    "ac_output_power": { "name": "Công suất AC Ngõ ra" },
+                    "ac_output_va": { "name": "Công suất biểu kiến AC Ngõ ra" },
+                    "device_temperature": { "name": "Nhiệt độ Thiết bị" },
+                    "pv1_voltage": { "name": "Điện áp PV1" },
+                    "pv1_power": { "name": "Công suất PV1" },
+                    "pv2_voltage": { "name": "Điện áp PV2" },
+                    "pv2_power": { "name": "Công suất PV2" },
+                    "last_raw_mqtt_hex": { "name": "Dữ liệu MQTT Hex cuối" },
+                    "pv_today": { "name": "Sản lượng PV hôm nay" },
+                    "charge_today": { "name": "Pin đã sạc hôm nay" },
+                    "discharge_today": { "name": "Pin đã xả hôm nay" },
+                    "grid_in_today": { "name": "Điện lưới đã lấy hôm nay" },
+                    "load_today": { "name": "Tải tiêu thụ hôm nay" },
+                    "battery_status": { "name": "Trạng thái Pin" },
+                    "grid_status": { "name": "Trạng thái Lưới" },
+                    "ac_input_voltage": { "name": "Điện áp AC Ngõ vào" },
+                    "ac_input_frequency": { "name": "Tần số AC Ngõ vào" },
+                    "ac_input_power": { "name": "Công suất AC Ngõ vào" },
+                    "battery_type": { "name": "Loại Pin" },
+                    "battery_mode": { "name": "Chế độ Pin" },           # <<< DỊCH LẠI
+                    "work_mode": { "name": "Chế độ Làm việc" },       # <<< DỊCH LẠI
+                    "master_slave_status": { "name": "Trạng thái Master/Slave" },
+                    "beep_mode": { "name": "Chế độ Bíp" },             # <<< DỊCH LẠI
+                    "backlight_mode": { "name": "Chế độ Đèn nền" },    # <<< DỊCH LẠI
+                    "mqtt_device_sn": { "name": "SN Thiết bị (MQTT)" },
+                    "battery_cell_info": { "name": "Thông tin Cell Pin" }
+                 },
+                "binary_sensor": {
+                    "online_status": { "name": "Trạng thái Online" },
+                    "is_ups_mode": { "name": "Chế độ UPS" }
+                }
+            }
+        }
+    }
+}
+
+
+{
+    "title": "Lumentree Inverter",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Lumentree Device Authentication",
+                "description": "Please enter the **Device ID** of your Lumentree inverter.\n\nYou can usually find the Device ID on the label of the inverter or within the mobile app.",
+                "data": { "device_id": "Device ID" }
+            },
+            "confirm_device": {
+                "title": "Confirm Device",
+                "description": "Lumentree device found!\n\n**Name:** {device_name}\n**ID (SN):** {device_sn}\n\nPress SUBMIT to finish adding the device.",
+                "data": {}
+            }
+        },
+        "error": {
+            "cannot_connect": "Unable to connect to the Lumentree API. Check network connection.",
+            "invalid_auth": "Authentication failed. Check the Device ID or the API might be temporarily unavailable. Token might be expired.",
+            "cannot_connect_deviceinfo": "Could not fetch device info after authentication. Check network connection or API status.",
+            "token_missing": "Internal error: Authentication token is missing.",
+            "unknown": "An unknown error occurred."
+        },
+        "abort": {
+            "already_configured": "Device with this ID (SN: {device_sn}) is already configured.",
+            "reauth_successful": "Re-authentication was successful",
+            "missing_device_id": "Cannot reauthenticate: Device ID missing in existing configuration.",
+            "unknown_entry": "Cannot reauthenticate: Configuration entry not found.",
+            "auth_failed_reauth": "Re-authentication failed. Please check the Device ID."
+        }
+    },
+    "entity": {
+        "sensor": {
+            "pv_power": { "name": "PV Power" },
+            "battery_power": { "name": "Battery Power (Absolute)" },
+            "battery_soc": { "name": "Battery SOC" },
+            "grid_power": { "name": "Grid Power" },
+            "load_power": { "name": "Load Power" },
+            "battery_voltage": { "name": "Battery Voltage" },
+            "battery_current": { "name": "Battery Current" },
+            "ac_output_voltage": { "name": "AC Output Voltage" },
+            "grid_voltage": { "name": "Grid Voltage" },
+            "ac_output_frequency": { "name": "AC Output Frequency" },
+            "ac_output_power": { "name": "AC Output Power" },
+            "ac_output_va": { "name": "AC Output Apparent Power" },
+            "device_temperature": { "name": "Device Temperature" },
+            "pv1_voltage": { "name": "PV1 Voltage" },
+            "pv1_power": { "name": "PV1 Power" },
+            "pv2_voltage": { "name": "PV2 Voltage" },
+            "pv2_power": { "name": "PV2 Power" },
+            "last_raw_mqtt_hex": { "name": "Last Raw MQTT Hex" },
+            "pv_today": { "name": "PV Generation Today" },
+            "charge_today": { "name": "Battery Charge Today" },
+            "discharge_today": { "name": "Battery Discharge Today" },
+            "grid_in_today": { "name": "Grid Input Today" },
+            "load_today": { "name": "Load Consumption Today" },
+            "battery_status": { "name": "Battery Status" },
+            "grid_status": { "name": "Grid Status" },
+            "ac_input_voltage": { "name": "AC Input Voltage" },
+            "ac_input_frequency": { "name": "AC Input Frequency" },
+            "ac_input_power": { "name": "AC Input Power" },
+            "battery_type": { "name": "Battery Type" },
+            "master_slave_status": { "name": "Master/Slave Status" },
+            "mqtt_device_sn": { "name": "Device SN (MQTT)" },
+            "battery_cell_info": { "name": "Battery Cell Info" }
+        },
+        "binary_sensor": {
+            "online_status": { "name": "Online Status" },
+            "is_ups_mode": { "name": "UPS Mode" }
+        }
+    },
+    "translations": {
+        "vi": {
+            "title": "Lumentree Inverter",
+            "config": {
+                "step": {
+                    "user": {
+                        "title": "Xác thực Thiết bị Lumentree",
+                        "description": "Vui lòng nhập **Device ID** của bộ biến tần Lumentree.\n\nBạn thường có thể tìm thấy Device ID trên nhãn của biến tần hoặc trong ứng dụng di động.",
+                        "data": { "device_id": "Device ID" }
+                    },
+                    "confirm_device": {
+                        "title": "Xác nhận Thiết bị",
+                        "description": "Đã tìm thấy thiết bị Lumentree!\n\n**Tên:** {device_name}\n**ID (SN):** {device_sn}\n\nNhấn SUBMIT để hoàn tất thêm thiết bị.",
+                        "data": {}
+                    }
+                },
+                "error": {
+					"cannot_connect": "Unable to connect to the Lumentree API. Check network connection.",
+					"invalid_auth": "Authentication failed. Check the Device ID or the API might be temporarily unavailable. Token might be expired.",
+					"cannot_connect_deviceinfo": "Could not fetch device info after authentication. Check network connection or API status.",
+					"token_missing": "Internal error: Authentication token is missing.",
+					"unknown": "An unknown error occurred."
+						},
+				"abort": {
+					"already_configured": "Device with this ID (SN: {device_sn}) is already configured.",
+					"reauth_successful": "Re-authentication was successful",
+					"missing_device_id": "Cannot reauthenticate: Device ID missing in existing configuration.",
+					"unknown_entry": "Cannot reauthenticate: Configuration entry not found.",
+					"auth_failed_reauth": "Re-authentication failed. Please check the Device ID."
+						}
+            },
+            "entity": {
+                "sensor": {
+                    "pv_power": { "name": "Công suất PV" },
+                    "battery_power": { "name": "Công suất Pin (Tuyệt đối)" },
+                    "battery_soc": { "name": "Dung lượng Pin (SOC)" },
+                    "grid_power": { "name": "Công suất Lưới" },
+                    "load_power": { "name": "Công suất Tải" },
+                    "battery_voltage": { "name": "Điện áp Pin" },
+                    "battery_current": { "name": "Dòng điện Pin" },
+                    "ac_output_voltage": { "name": "Điện áp AC Ngõ ra" },
+                    "grid_voltage": { "name": "Điện áp Lưới" },
+                    "ac_output_frequency": { "name": "Tần số AC Ngõ ra" },
+                    "ac_output_power": { "name": "Công suất AC Ngõ ra" },
+                    "ac_output_va": { "name": "Công suất biểu kiến AC Ngõ ra" },
+                    "device_temperature": { "name": "Nhiệt độ Thiết bị" },
+                    "pv1_voltage": { "name": "Điện áp PV1" },
+                    "pv1_power": { "name": "Công suất PV1" },
+                    "pv2_voltage": { "name": "Điện áp PV2" },
+                    "pv2_power": { "name": "Công suất PV2" },
+                    "last_raw_mqtt_hex": { "name": "Dữ liệu MQTT Hex cuối" },
+                    "pv_today": { "name": "Sản lượng PV hôm nay" },
+                    "charge_today": { "name": "Pin đã sạc hôm nay" },
+                    "discharge_today": { "name": "Pin đã xả hôm nay" },
+                    "grid_in_today": { "name": "Điện lưới đã lấy hôm nay" },
+                    "load_today": { "name": "Tải tiêu thụ hôm nay" },
+                    "battery_status": { "name": "Trạng thái Pin" },
+                    "grid_status": { "name": "Trạng thái Lưới" },
+                    "ac_input_voltage": { "name": "Điện áp AC Ngõ vào" },
+                    "ac_input_frequency": { "name": "Tần số AC Ngõ vào" },
+                    "ac_input_power": { "name": "Công suất AC Ngõ vào" },
+                    "battery_type": { "name": "Loại Pin" },
+                    "master_slave_status": { "name": "Trạng thái Master/Slave" },
+                    "mqtt_device_sn": { "name": "SN Thiết bị (MQTT)" },
+                    "battery_cell_info": { "name": "Thông tin Cell Pin" }
+                 },
+                "binary_sensor": {
+                    "online_status": { "name": "Trạng thái Online" },
+                    "is_ups_mode": { "name": "Chế độ UPS" }
+                }
+            }
+        }
+    }
+}
