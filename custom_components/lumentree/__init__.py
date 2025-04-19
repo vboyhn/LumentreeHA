@@ -1,5 +1,5 @@
 # /config/custom_components/lumentree/__init__.py
-# Final version - STRICT formatting in fallback definitions AGAIN
+# Final version - Fixed NameError: name 'callback' is not defined
 
 import asyncio
 import time
@@ -15,14 +15,15 @@ import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STOP
-from homeassistant.core import HomeAssistant, Event
-# <<< Di chuyển import exception lên đầu khối try >>>
+# <<< THÊM IMPORT callback >>>
+from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.exceptions import ConfigEntryNotReady, ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.device_registry import DeviceEntry
 
 try:
+    # Import các const đã cập nhật
     from .const import (
         DOMAIN, _LOGGER, CONF_DEVICE_SN, CONF_DEVICE_ID,
         MQTT_BROKER, DEFAULT_POLLING_INTERVAL, CONF_HTTP_TOKEN, DEFAULT_STATS_INTERVAL
@@ -37,34 +38,38 @@ except ImportError as import_err:
     DOMAIN = "lumentree"; CONF_DEVICE_SN = "device_sn"; CONF_DEVICE_ID = "device_id";
     MQTT_BROKER = "lesvr.suntcn.com"; DEFAULT_POLLING_INTERVAL = 5; CONF_HTTP_TOKEN = "http_token"; DEFAULT_STATS_INTERVAL = 600
 
+    # Fallback Class MQTT
     class LumentreeMqttClient:
         def __init__(self, hass, entry, device_sn, device_id): pass
-        async def connect(self): _LOGGER.warning("Fallback MQTT connect"); await asyncio.sleep(0)
-        async def disconnect(self): _LOGGER.warning("Fallback MQTT disconnect"); await asyncio.sleep(0)
-        async def async_request_data(self): _LOGGER.warning("Fallback MQTT request_data"); await asyncio.sleep(0)
-        async def async_request_battery_cells(self): _LOGGER.warning("Fallback MQTT request_cells"); await asyncio.sleep(0)
+        async def connect(self): _LOGGER.warning("Using fallback MQTT connect"); await asyncio.sleep(0)
+        async def disconnect(self): _LOGGER.warning("Using fallback MQTT disconnect"); await asyncio.sleep(0)
+        async def async_request_data(self): _LOGGER.warning("Using fallback MQTT request_data"); await asyncio.sleep(0)
+        async def async_request_battery_cells(self): _LOGGER.warning("Using fallback MQTT request_cells"); await asyncio.sleep(0)
         @property
         def is_connected(self) -> bool: return False
 
+    # Fallback Class API
     class LumentreeHttpApiClient:
         def __init__(self, session): pass
         def set_token(self, token): pass
-        async def authenticate_device(self, dev_id): _LOGGER.warning("Fallback API authenticate"); return "fallback_token"
-        async def get_device_info(self, dev_id): _LOGGER.warning("Fallback API get_info"); return {"deviceId": dev_id, "deviceType": "Fallback Model"}
-        async def get_daily_stats(self, sn, date): _LOGGER.warning("Fallback API get_stats"); return {}
+        async def authenticate_device(self, dev_id): _LOGGER.warning("Using fallback API authenticate"); return "fallback_token"
+        async def get_device_info(self, dev_id): _LOGGER.warning("Using fallback API get_info"); return {"deviceId": dev_id, "deviceType": "Fallback Model"}
+        async def get_daily_stats(self, sn, date): _LOGGER.warning("Using fallback API get_stats"); return {}
 
+    # Fallback Class Coordinator
     class LumentreeStatsCoordinator:
         def __init__(self, hass, client, sn): pass
-        async def async_config_entry_first_refresh(self): _LOGGER.warning("Fallback Coord refresh"); await asyncio.sleep(0)
-        async def async_refresh(self): _LOGGER.warning("Fallback Coord refresh"); await asyncio.sleep(0)
+        async def async_config_entry_first_refresh(self): _LOGGER.warning("Using fallback Coordinator refresh"); await asyncio.sleep(0)
+        async def async_refresh(self): _LOGGER.warning("Using fallback Coordinator refresh"); await asyncio.sleep(0)
         @property
         def data(self): return {}
         last_update_success = False
 
-    class AuthException(Exception): pass
-    class ApiException(Exception): pass
-
-    # <<< Fallback cho các exception chuẩn của HA >>>
+    # Fallback Exceptions (Tách class ra dòng riêng)
+    class AuthException(Exception):
+        pass
+    class ApiException(Exception):
+        pass
     # Lấy chúng từ global scope nếu đã được import ở trên, nếu không thì định nghĩa class fallback
     if "UpdateFailed" not in globals():
          class UpdateFailed(Exception):
@@ -151,18 +156,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         remove_interval = async_track_time_interval(hass, _async_poll_data, polling_interval)
         _LOGGER.info(f"Started MQTT polling {polling_interval} for {device_sn}")
 
+        # <<< THÊM @callback decorator >>>
         @callback
         def _cancel_timer_on_unload():
+            """Cancel the polling timer when the entry is unloaded."""
             nonlocal remove_interval
-            _LOGGER.debug(f"Unload: Cancelling MQTT timer {device_sn}.")
+            _LOGGER.debug(f"Unload: Cancelling MQTT timer for {device_sn}.")
             current_timer = remove_interval
             if callable(current_timer):
-                try: current_timer(); _LOGGER.info(f"MQTT timer cancelled unload {device_sn}."); remove_interval=None
-                except Exception as timer_err: _LOGGER.error(f"Error cancel timer unload {device_sn}: {timer_err}")
+                try:
+                    current_timer()
+                    _LOGGER.info(f"MQTT polling timer cancelled for {device_sn} during unload.")
+                    remove_interval = None # Đảm bảo không gọi lại
+                except Exception as timer_err:
+                    _LOGGER.error(f"Error cancelling timer during unload {device_sn}: {timer_err}")
 
         async def _async_stop_mqtt(event: Event) -> None:
-            _LOGGER.info("HA stop."); client_to_stop = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("mqtt_client")
-            if isinstance(client_to_stop, LumentreeMqttClient): _LOGGER.info(f"Disconnecting MQTT {device_sn}."); await client_to_stop.disconnect()
+            _LOGGER.info("HA stop.");
+            client_to_stop = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("mqtt_client")
+            if isinstance(client_to_stop, LumentreeMqttClient):
+                _LOGGER.info(f"Disconnecting MQTT {device_sn}.")
+                await client_to_stop.disconnect()
 
         entry.async_on_unload(_cancel_timer_on_unload)
         entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop_mqtt))
