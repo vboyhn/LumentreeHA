@@ -1,317 +1,264 @@
 # /config/custom_components/lumentree/parser.py
-# Version for Restore Point 1
+# Final cleanup - Removed unavailable MQTT modes, expect only 95 regs or cell data
 
 from typing import Optional, Dict, Any, Tuple, List
 import logging
 import struct
+import math
 
-# --- Import thư viện CRC và các hằng số ---
+# --- Import ---
 try:
-    # Thử import crcmod trước
     import crcmod.predefined
-    # Tạo hàm tính CRC nếu import thành công
     crc16_modbus_func = crcmod.predefined.mkCrcFun('modbus')
-    _LOGGER = logging.getLogger(__package__) # Lấy logger từ package
-    # Import các KEY và REG_ADDR cần thiết cho RP1
+    _LOGGER = logging.getLogger(__package__)
     from .const import (
         _LOGGER, REG_ADDR,
         KEY_ONLINE_STATUS, KEY_PV_POWER, KEY_BATTERY_POWER, KEY_BATTERY_SOC,
-        KEY_GRID_POWER, KEY_LOAD_POWER,
-        KEY_BATTERY_VOLTAGE, KEY_BATTERY_CURRENT, KEY_AC_OUT_VOLTAGE, KEY_GRID_VOLTAGE,
-        KEY_AC_OUT_FREQ, KEY_AC_OUT_POWER, KEY_AC_OUT_VA, KEY_DEVICE_TEMP,
-        KEY_PV1_VOLTAGE, KEY_PV1_POWER, KEY_PV2_VOLTAGE, KEY_PV2_POWER,
-        KEY_IS_UPS_MODE
-        # Bỏ KEY KWh ở RP1
+        KEY_GRID_POWER, KEY_LOAD_POWER, KEY_BATTERY_VOLTAGE, KEY_BATTERY_CURRENT,
+        KEY_AC_OUT_VOLTAGE, KEY_GRID_VOLTAGE, KEY_AC_OUT_FREQ, KEY_AC_OUT_POWER,
+        KEY_AC_OUT_VA, KEY_DEVICE_TEMP, KEY_PV1_VOLTAGE, KEY_PV1_POWER,
+        KEY_PV2_VOLTAGE, KEY_PV2_POWER, KEY_IS_UPS_MODE, KEY_BATTERY_STATUS,
+        KEY_GRID_STATUS, KEY_AC_IN_VOLTAGE, KEY_AC_IN_FREQ, KEY_AC_IN_POWER,
+        KEY_BATTERY_TYPE,
+        KEY_MASTER_SLAVE_STATUS,
+        KEY_MQTT_DEVICE_SN,
+        KEY_BATTERY_CELL_INFO, REG_ADDR_CELL_START, REG_ADDR_CELL_COUNT,
+        MAP_BATTERY_TYPE
     )
 except ImportError:
-    # Fallback nếu không import được crcmod hoặc const
-    _LOGGER = logging.getLogger(__name__)
-    _LOGGER.warning("Could not import crcmod or constants, CRC check/generation disabled. Using fallback keys.")
-    crc16_modbus_func = None # Đặt là None nếu không import được crcmod
-    # Fallback REG_ADDR và KEYs cho RP1
-    REG_ADDR = {"BATTERY_SOC": 50, "GRID_POWER": 59, "BATTERY_POWER": 61, "LOAD_POWER": 67, "BATTERY_VOLTAGE": 11, "BATTERY_CURRENT": 12, "AC_OUT_VOLTAGE": 13, "GRID_VOLTAGE": 15, "AC_OUT_FREQ": 16, "AC_OUT_POWER": 18, "PV1_VOLTAGE": 20, "PV1_POWER": 22, "DEVICE_TEMP": 24, "PV2_VOLTAGE": 72, "PV2_POWER": 74, "AC_OUT_VA": 58, "UPS_MODE": 68}
-    KEY_ONLINE_STATUS="online_status"; KEY_PV_POWER="pv_power"; KEY_BATTERY_POWER="battery_power"; KEY_BATTERY_SOC="battery_soc"; KEY_GRID_POWER="grid_power"; KEY_LOAD_POWER="load_power"; KEY_BATTERY_VOLTAGE="battery_voltage"; KEY_BATTERY_CURRENT="battery_current"; KEY_AC_OUT_VOLTAGE="ac_output_voltage"; KEY_GRID_VOLTAGE="grid_voltage"; KEY_AC_OUT_FREQ="ac_output_frequency"; KEY_AC_OUT_POWER="ac_output_power"; KEY_AC_OUT_VA="ac_output_va"; KEY_DEVICE_TEMP="device_temperature"; KEY_PV1_VOLTAGE="pv1_voltage"; KEY_PV1_POWER="pv1_power"; KEY_PV2_VOLTAGE="pv2_voltage"; KEY_PV2_POWER="pv2_power"; KEY_IS_UPS_MODE="is_ups_mode"
-except KeyError:
-    # Fallback nếu import const thành công nhưng thiếu key (ít xảy ra)
-     _LOGGER = logging.getLogger(__package__) if '__package__' in globals() else logging.getLogger(__name__)
-     _LOGGER.warning("KeyError importing constants. Using fallback keys.")
-     crc16_modbus_func = None # Assume crcmod might also be missing
-     REG_ADDR = {"BATTERY_SOC": 50, "GRID_POWER": 59, "BATTERY_POWER": 61, "LOAD_POWER": 67, "BATTERY_VOLTAGE": 11, "BATTERY_CURRENT": 12, "AC_OUT_VOLTAGE": 13, "GRID_VOLTAGE": 15, "AC_OUT_FREQ": 16, "AC_OUT_POWER": 18, "PV1_VOLTAGE": 20, "PV1_POWER": 22, "DEVICE_TEMP": 24, "PV2_VOLTAGE": 72, "PV2_POWER": 74, "AC_OUT_VA": 58, "UPS_MODE": 68}
-     KEY_ONLINE_STATUS="online_status"; KEY_PV_POWER="pv_power"; KEY_BATTERY_POWER="battery_power"; KEY_BATTERY_SOC="battery_soc"; KEY_GRID_POWER="grid_power"; KEY_LOAD_POWER="load_power"; KEY_BATTERY_VOLTAGE="battery_voltage"; KEY_BATTERY_CURRENT="battery_current"; KEY_AC_OUT_VOLTAGE="ac_output_voltage"; KEY_GRID_VOLTAGE="grid_voltage"; KEY_AC_OUT_FREQ="ac_output_frequency"; KEY_AC_OUT_POWER="ac_output_power"; KEY_AC_OUT_VA="ac_output_va"; KEY_DEVICE_TEMP="device_temperature"; KEY_PV1_VOLTAGE="pv1_voltage"; KEY_PV1_POWER="pv1_power"; KEY_PV2_VOLTAGE="pv2_voltage"; KEY_PV2_POWER="pv2_power"; KEY_IS_UPS_MODE="is_ups_mode"
+    _LOGGER = logging.getLogger(__name__); _LOGGER.warning("ImportError parser.py")
+    crc16_modbus_func = None; REG_ADDR = {}; KEY_ONLINE_STATUS="online"; KEY_IS_UPS_MODE="ups"; KEY_PV_POWER="pv"; KEY_BATTERY_POWER="bat_p"; KEY_BATTERY_SOC="soc"; KEY_GRID_POWER="grid_p"; KEY_LOAD_POWER="load_p"; KEY_BATTERY_VOLTAGE="bat_v"; KEY_BATTERY_CURRENT="bat_c"; KEY_AC_OUT_VOLTAGE="ac_out_v"; KEY_GRID_VOLTAGE="grid_v"; KEY_AC_OUT_FREQ="ac_out_f"; KEY_AC_OUT_POWER="ac_out_p"; KEY_AC_OUT_VA="ac_out_va"; KEY_DEVICE_TEMP="temp"; KEY_PV1_VOLTAGE="pv1_v"; KEY_PV1_POWER="pv1_p"; KEY_PV2_VOLTAGE="pv2_v"; KEY_PV2_POWER="pv2_p"; KEY_BATTERY_STATUS="bat_stat"; KEY_GRID_STATUS="grid_stat"; KEY_AC_IN_VOLTAGE="ac_in_v"; KEY_AC_IN_FREQ="ac_in_f"; KEY_AC_IN_POWER="ac_in_p"; KEY_BATTERY_TYPE="bat_type"; KEY_MASTER_SLAVE_STATUS="ms_stat"; KEY_MQTT_DEVICE_SN="mqtt_sn"; KEY_BATTERY_CELL_INFO="cells"
+    REG_ADDR_CELL_START=250; REG_ADDR_CELL_COUNT=50; MAP_BATTERY_TYPE={}
+except KeyError: _LOGGER = logging.getLogger(__name__); _LOGGER.warning("KeyError parser.py const")
 
 
-def calculate_crc16_modbus(payload_bytes: bytes) -> Optional[int]:
-    """Calculates the Modbus CRC16 checksum."""
+# --- CRC Functions ---
+def calculate_crc16_modbus(pb: bytes) -> Optional[int]:
     if crc16_modbus_func:
         try:
-            return crc16_modbus_func(payload_bytes)
-        except Exception as e:
-            _LOGGER.error(f"Error calculating CRC: {e}")
+            return crc16_modbus_func(pb)
+        except Exception:
             return None
-    else:
-        _LOGGER.debug("crcmod library not available, cannot calculate CRC.")
-        return None # Cannot calculate if function is None
+    return None
 
-def verify_crc(payload_hex: str) -> Tuple[bool, Optional[str]]:
-    """Verifies the CRC16 Modbus checksum of a hex payload."""
+def verify_crc(ph: str) -> Tuple[bool, Optional[str]]:
     if not crc16_modbus_func:
-        _LOGGER.debug("crcmod not available, skipping CRC verification.")
-        # Nếu không có crcmod, tạm chấp nhận là đúng để parse thử
-        return True, "CRC check skipped"
-
-    if len(payload_hex) < 4:
-        return False, "Payload too short for CRC"
-
+        return True, "CRC skipped"
+    if len(ph) < 4:
+        return False, "Too short"
     try:
-        data_hex = payload_hex[:-4]
-        received_crc_hex = payload_hex[-4:]
-        data_bytes = bytes.fromhex(data_hex)
+        dh, rc = ph[:-4], ph[-4:].lower()
+        db = bytes.fromhex(dh)
+        cc = calculate_crc16_modbus(db)
+        if cc is None:
+            return False, "Calc fail"
+        cch = cc.to_bytes(2,'little').hex()
+        ok = cch == rc
+        if not ok:
+            _LOGGER.warning(f"CRC mismatch! Rcv: {rc}, Calc: {cch}")
+        return ok, None if ok else f"Mismatch {rc} vs {cch}"
+    except Exception:
+        return False, "Verify error"
 
-        calculated_crc = calculate_crc16_modbus(data_bytes)
-        if calculated_crc is None:
-            return False, "CRC calculation failed"
-
-        # CRC trả về 2 byte, cần đảo ngược byte order (little-endian) để so sánh
-        calculated_crc_bytes = calculated_crc.to_bytes(2, byteorder='little')
-        calculated_crc_hex = calculated_crc_bytes.hex()
-
-        is_valid = calculated_crc_hex == received_crc_hex.lower()
-        if not is_valid:
-            _LOGGER.warning(f"CRC mismatch! Received: {received_crc_hex}, Calculated: {calculated_crc_hex}")
-            return False, f"CRC mismatch: rcv={received_crc_hex}, calc={calculated_crc_hex}"
-        else:
-            _LOGGER.debug("CRC check successful.")
-            return True, None
-    except ValueError as e:
-        _LOGGER.error(f"Error decoding hex for CRC check: {e}")
-        return False, "Hex decoding error"
-    except Exception as e:
-        _LOGGER.exception(f"Unexpected error during CRC verification: {e}")
-        return False, f"Unexpected CRC error: {e}"
-
-def generate_modbus_read_command(slave_id: int, func_code: int, start_addr: int, num_registers: int) -> Optional[str]:
-    """Generates a Modbus read command hex string with CRC."""
+def generate_modbus_read_command(sid: int, fc: int, addr: int, num: int) -> Optional[str]:
     if not crc16_modbus_func:
-        _LOGGER.error("Cannot generate Modbus command: crcmod library not available.")
         return None
     try:
-        # Tạo phần PDU (Protocol Data Unit) không bao gồm Slave ID và CRC
-        pdu = bytearray()
-        pdu.append(func_code)
-        pdu.extend(start_addr.to_bytes(2, byteorder='big'))
-        pdu.extend(num_registers.to_bytes(2, byteorder='big'))
-
-        # Tạo phần ADU (Application Data Unit) ban đầu gồm Slave ID + PDU
-        adu_no_crc = bytearray()
-        adu_no_crc.append(slave_id)
-        adu_no_crc.extend(pdu)
-
-        # Tính CRC cho ADU không bao gồm CRC
-        crc = calculate_crc16_modbus(bytes(adu_no_crc))
+        pdu=bytearray([fc])+addr.to_bytes(2,'big')+num.to_bytes(2,'big')
+        adu=bytearray([sid])+pdu
+        crc=calculate_crc16_modbus(bytes(adu))
         if crc is None:
-             _LOGGER.error("CRC calculation failed during command generation.")
              return None
-
-        # Ghép ADU và CRC (CRC là little-endian)
-        adu_full = adu_no_crc + crc.to_bytes(2, byteorder='little')
-
-        command_hex = adu_full.hex()
-        _LOGGER.debug(f"Generated Modbus command: {command_hex}")
-        return command_hex
-    except Exception as e:
-        _LOGGER.exception(f"Error generating Modbus command: {e}")
+        full=adu+crc.to_bytes(2,'little')
+        return full.hex()
+    except Exception:
         return None
 
-
-def parse_mqtt_payload(payload_hex: str) -> Optional[Dict[str, Any]]:
-    """Parses the custom hex payload from MQTT (Restore Point 1)."""
-    _LOGGER.debug(f"Received raw hex payload: {payload_hex[:100]}...") # Log phần đầu
-    parsed_data = {}
-
-    # Kiểm tra cấu trúc cơ bản: Phải là phản hồi đọc (0103 hoặc 0104)
-    # và có thể có dấu phân cách "++++" (2b2b2b2b)
-    response_with_crc_hex = None
-    if payload_hex.startswith("0103") or payload_hex.startswith("0104"):
-        separator_hex = "2b2b2b2b"
-        if separator_hex in payload_hex:
-            try:
-                parts = payload_hex.split(separator_hex)
-                # Lấy phần sau dấu phân cách nếu có 2 phần
-                if len(parts) == 2:
-                    response_with_crc_hex = parts[1]
-                    _LOGGER.debug("Separator '++++' found, parsing part after it.")
-                else:
-                     _LOGGER.warning(f"Separator '++++' found, but split resulted in {len(parts)} parts. Ignoring.")
-                     return None
-            except Exception as e:
-                _LOGGER.error(f"Error splitting payload by separator: {e}")
-                return None
-        else:
-            # Nếu không có separator, toàn bộ payload là phần phản hồi
-            response_with_crc_hex = payload_hex
-            _LOGGER.debug("No separator '++++' found, parsing entire payload.")
-
-        # Nếu không tìm thấy phần response hợp lệ
-        if not response_with_crc_hex or not (response_with_crc_hex.startswith("0103") or response_with_crc_hex.startswith("0104")):
-             _LOGGER.warning("Could not extract valid Modbus response part from payload.")
-             return None
-
-        # --- Xác thực và trích xuất data_bytes từ response_with_crc_hex ---
-        # Kiểm tra độ dài tối thiểu (header 3 byte + data min 1 byte + crc 2 byte = 6 byte hex)
-        if len(response_with_crc_hex) < 10: # Ít nhất 1 word data
-            _LOGGER.warning(f"Response part too short: {response_with_crc_hex}")
-            return None
-
+# --- Helper Functions ---
+def _read_register(db: bytes, ra: int, s: bool, f: float = 1.0, bc: int = 2) -> Optional[float]:
+    offset_bytes = ra * 2
+    if offset_bytes + bc <= len(db):
         try:
-            # Lấy byte count (byte thứ 3, index 4 và 5)
-            byte_count_hex = response_with_crc_hex[4:6]
-            byte_count = int(byte_count_hex, 16)
-
-            # Kiểm tra độ dài tổng thể dự kiến
-            expected_data_hex_len = byte_count * 2
-            expected_total_len = 6 + expected_data_hex_len + 4 # Header (0103/04 + count) + Data + CRC
-            if len(response_with_crc_hex) != expected_total_len:
-                 _LOGGER.warning(f"Payload length mismatch. Expected {expected_total_len} hex chars based on byte count {byte_count}, got {len(response_with_crc_hex)}.")
-                 # Có thể thử parse nếu CRC đúng? Tạm thời bỏ qua
-                 # return None # Bỏ qua nếu độ dài không khớp chặt chẽ
-                 pass # Vẫn thử CRC
-
-            # Xác thực CRC
-            crc_valid, crc_msg = verify_crc(response_with_crc_hex)
-            if not crc_valid:
-                _LOGGER.warning(f"CRC check failed: {crc_msg}. Payload: {response_with_crc_hex}")
-                # return None # Bỏ qua nếu CRC sai
-
-            # Trích xuất phần data hex (bỏ qua header và CRC)
-            data_start_index = 6
-            data_end_index = data_start_index + expected_data_hex_len
-            # Cẩn thận với index nếu độ dài thực tế khác dự kiến
-            actual_data_end_index = len(response_with_crc_hex) - 4
-            if data_end_index > actual_data_end_index : # Đảm bảo không đọc vượt quá CRC
-                 data_end_index = actual_data_end_index
-
-            data_hex = response_with_crc_hex[data_start_index : data_end_index]
-            data_bytes = bytes.fromhex(data_hex)
-
-            # Kiểm tra lại độ dài data_bytes với byte_count (quan trọng)
-            if len(data_bytes) != byte_count:
-                _LOGGER.warning(f"Actual data bytes length ({len(data_bytes)}) does not match byte count ({byte_count}).")
-                # return None # Bỏ qua nếu không khớp
-
-            _LOGGER.debug(f"CRC OK (or skipped). Parsing {len(data_bytes)} data bytes...")
-
-            # --- Hàm trợ giúp đọc thanh ghi ---
-            def read_reg_signed_short(reg_addr: int, factor: float = 1.0) -> Optional[float]:
-                offset_bytes = reg_addr * 2
-                if offset_bytes + 2 <= len(data_bytes):
-                    try:
-                        # Đọc 2 byte là signed short, big-endian
-                        raw_val = struct.unpack('>h', data_bytes[offset_bytes:offset_bytes+2])[0]
-                        return round(raw_val * factor, 2)
-                    except struct.error: return None
-                return None
-
-            def read_reg_unsigned_short(reg_addr: int, factor: float = 1.0) -> Optional[float]:
-                offset_bytes = reg_addr * 2
-                if offset_bytes + 2 <= len(data_bytes):
-                    try:
-                        # Đọc 2 byte là unsigned short, big-endian
-                        raw_val = struct.unpack('>H', data_bytes[offset_bytes:offset_bytes+2])[0]
-                        return round(raw_val * factor, 2)
-                    except struct.error: return None
-                return None
-
-            def read_reg_unsigned_int32(reg_addr: int, factor: float = 1.0) -> Optional[float]: # Dùng cho KWh nếu cần
-                offset_bytes = reg_addr * 2
-                if offset_bytes + 4 <= len(data_bytes):
-                    try:
-                         # Đọc 4 byte là unsigned int, big-endian
-                         raw_val = struct.unpack('>I', data_bytes[offset_bytes:offset_bytes+4])[0]
-                         return round(raw_val * factor, 2)
-                    except struct.error: return None
-                return None
-
-            def read_temperature(reg_addr: int) -> Optional[float]:
-                 """Đọc nhiệt độ theo công thức (raw - 1000) / 10.0"""
-                 offset_bytes = reg_addr * 2
-                 if offset_bytes + 2 <= len(data_bytes):
-                     try:
-                         # Nhiệt độ có thể là số âm, đọc là signed short
-                         raw_val_temp = struct.unpack('>h', data_bytes[offset_bytes:offset_bytes+2])[0]
-                         temp_c = (float(raw_val_temp) - 1000.0) / 10.0
-                         # Kiểm tra giới hạn hợp lý
-                         if -40.0 < temp_c < 150.0: return round(temp_c, 1)
-                         else: _LOGGER.warning(f"Temp from Reg {reg_addr} ({temp_c}C) out of range."); return None
-                     except struct.error: return None
-                 return None
-
-            # --- GIẢI MÃ DỮ LIỆU TỨC THỜI (RP1) ---
-            addr = REG_ADDR # Sử dụng map từ const.py
-
-            parsed_data[KEY_BATTERY_VOLTAGE] = read_reg_unsigned_short(addr["BATTERY_VOLTAGE"], 0.01)
-            bat_current_val = read_reg_signed_short(addr["BATTERY_CURRENT"], 0.01)
-            # Đảo dấu dòng pin: dương là sạc, âm là xả (theo tiêu chuẩn HA)
-            parsed_data[KEY_BATTERY_CURRENT] = -bat_current_val if bat_current_val is not None else None
-            parsed_data[KEY_AC_OUT_VOLTAGE] = read_reg_unsigned_short(addr["AC_OUT_VOLTAGE"], 0.1)
-            parsed_data[KEY_GRID_VOLTAGE] = read_reg_unsigned_short(addr["GRID_VOLTAGE"], 0.1)
-            parsed_data[KEY_AC_OUT_FREQ] = read_reg_unsigned_short(addr["AC_OUT_FREQ"], 0.01)
-            parsed_data[KEY_DEVICE_TEMP] = read_temperature(addr["DEVICE_TEMP"]) # Dùng hàm đọc nhiệt độ riêng
-            parsed_data[KEY_PV1_VOLTAGE] = read_reg_unsigned_short(addr["PV1_VOLTAGE"])
-            parsed_data[KEY_PV2_VOLTAGE] = read_reg_unsigned_short(addr["PV2_VOLTAGE"])
-            # Grid power là số có dấu: dương là nhập, âm là xuất
-            parsed_data[KEY_GRID_POWER] = read_reg_signed_short(addr["GRID_POWER"])
-            parsed_data[KEY_LOAD_POWER] = read_reg_unsigned_short(addr["LOAD_POWER"])
-            parsed_data[KEY_AC_OUT_POWER] = read_reg_unsigned_short(addr["AC_OUT_POWER"])
-            parsed_data[KEY_AC_OUT_VA] = read_reg_unsigned_short(addr["AC_OUT_VA"])
-            # Battery power là số có dấu (âm là sạc, dương là xả), lấy giá trị tuyệt đối cho sensor này
-            bat_power_signed = read_reg_signed_short(addr["BATTERY_POWER"])
-            parsed_data[KEY_BATTERY_POWER] = abs(bat_power_signed) if bat_power_signed is not None else None
-            pv1_power = read_reg_unsigned_short(addr["PV1_POWER"])
-            pv2_power = read_reg_unsigned_short(addr["PV2_POWER"])
-            # Tính tổng PV power, chỉ tính nếu có giá trị
-            pv_power_total = (pv1_power if pv1_power is not None else 0) + (pv2_power if pv2_power is not None else 0)
-            # Chỉ gán nếu ít nhất 1 PV có giá trị
-            if pv1_power is not None or pv2_power is not None:
-                 parsed_data[KEY_PV_POWER] = pv_power_total
+            raw_bytes = db[offset_bytes : offset_bytes + bc]
+            fmt = None
+            if bc == 2:
+                fmt = '>h' if s else '>H'
+            elif bc == 4:
+                fmt = '>i' if s else '>I'
             else:
-                 parsed_data[KEY_PV_POWER] = None # Hoặc 0? Tạm để None
-            # SOC là unsigned short
-            soc_val = read_reg_unsigned_short(addr["BATTERY_SOC"])
-            # Đảm bảo SOC trong khoảng 0-100
-            parsed_data[KEY_BATTERY_SOC] = max(0, min(100, int(soc_val))) if soc_val is not None else None
-            # UPS Mode là boolean (0 = True)
-            ups_val = read_reg_unsigned_short(addr["UPS_MODE"])
-            parsed_data[KEY_IS_UPS_MODE] = (ups_val == 0) if ups_val is not None else None
+                _LOGGER.warning(f"Unsupported byte_count {bc}.")
+                return None
 
-            # Bỏ qua việc đọc KWh ở RP1
-            # Ví dụ:
-            # discharge_today = read_reg_unsigned_short(addr.get("TOTAL_BAT_DISCHARGE_KWH"), 0.1)
-            # if discharge_today is not None: parsed_data[KEY_TOTAL_BAT_DISCHARGE_KWH] = discharge_today
-
-            # Lọc bỏ các giá trị None trước khi trả về
-            parsed_data = {k: v for k, v in parsed_data.items() if v is not None}
-            _LOGGER.debug(f"Parsed realtime data dict (RP1): {parsed_data}")
-
-        except ValueError as e:
-            _LOGGER.error(f"ValueError during parsing: {e}. Payload part: {response_with_crc_hex[:60]}...")
-            return None
+            if fmt:
+                 raw_val = struct.unpack(fmt, raw_bytes)[0]
+                 result = round(raw_val * f, 3)
+                 if not math.isfinite(result):
+                     _LOGGER.warning(f"Invalid float read from reg {ra}.")
+                     return None
+                 return result
+            else:
+                return None
         except struct.error as e:
-             _LOGGER.error(f"Struct unpacking error: {e}. Data bytes length: {len(data_bytes)}")
-             return None
-        except Exception as e:
-            _LOGGER.exception(f"Unexpected error during payload parsing: {e}")
+            _LOGGER.error(f"Struct error reading reg {ra}: {e}")
             return None
+        except Exception as e:
+            _LOGGER.exception(f"Unexpected error reading reg {ra}: {e}")
+            return None
+    return None
 
+def _read_string(db: bytes, sa: int, nr: int) -> Optional[str]:
+    o, nb = sa*2, nr*2
+    if o + nb <= len(db):
+        try:
+            rb = db[o:o+nb]
+            ds = rb.decode('ascii', 'ignore').replace('\x00','').strip()
+            return ds if ds else None
+        except Exception:
+            return None
+    return None
+
+def _parse_battery_cells(db: bytes) -> Optional[Dict[str, Any]]:
+    _LOGGER.debug(f"Parsing {len(db)} cell bytes...")
+    cd, nc, tv, mnv, mxv = {}, 0, 0.0, 999.0, 0.0
+    npc = len(db)//2
+    for i in range(npc):
+        v_mv = _read_register(db, i, False)
+        if v_mv is not None:
+            cv = round(v_mv/1000.0, 3)
+            if 1.0 < cv < 5.0:
+                cd[f"c_{i+1:02d}"]=cv
+                nc+=1
+                tv+=cv
+                mnv=min(mnv,cv)
+                mxv=max(mxv,cv)
+    if nc > 0:
+        avg=round(tv/nc,3)
+        diff=round(mxv-mnv,3)
+        res={"num":nc,"avg":avg,"min":mnv if mnv!=999.0 else None,"max":mxv if mxv!=0.0 else None,"diff":diff,"cells":cd}
+        _LOGGER.debug(f"Parsed cells: {res}")
+        return res
     else:
-        _LOGGER.debug(f"Payload does not start with known Modbus response header: {payload_hex[:10]}")
+        _LOGGER.warning("No valid cells.")
         return None
 
-    # Trả về dữ liệu đã parse nếu thành công
+# --- Main Parsing Function ---
+def parse_mqtt_payload(ph: str) -> Optional[Dict[str, Any]]:
+    _LOGGER.debug(f"Parsing: {ph[:100]}...")
+    parsed_data: Dict[str, Any] = {}
+    db: Optional[bytes] = None
+    is_cell_data = False
+    resp_hex: Optional[str] = None
+    sep = "2b2b2b2b"
+
+    if sep in ph:
+        parts=ph.split(sep)
+        if len(parts)==2 and (parts[1].startswith("0103") or parts[1].startswith("0104")):
+             resp_hex = parts[1]
+    elif ph.startswith("0103") or ph.startswith("0104"):
+         resp_hex = ph
+
+    if not resp_hex or len(resp_hex)<12:
+        return None
+
+    try:
+        crc_ok, _ = verify_crc(resp_hex)
+        # if not crc_ok: return None # Optionally ignore CRC errors
+
+        bc = int(resp_hex[4:6],16)
+        dh = resp_hex[6:-4]
+        db = bytes.fromhex(dh)
+
+        if len(db)!=bc:
+            _LOGGER.warning(f"Len mismatch:{len(db)} vs {bc}.")
+        if len(db)==0 and bc>0:
+            _LOGGER.error("No data."); return None
+
+        _LOGGER.debug(f"Parsing {len(db)} bytes...")
+
+        expected_cell_bytes = REG_ADDR_CELL_COUNT * 2
+        expected_main_bytes = 95 * 2
+
+        if bc==expected_cell_bytes and len(db)==expected_cell_bytes:
+            is_cell=True
+            _LOGGER.info("Cell data.")
+        elif bc==expected_main_bytes and len(db)==expected_main_bytes:
+            is_cell=False
+            _LOGGER.info("Main data (95 regs).")
+        else:
+            _LOGGER.error(f"Unrec len ({len(db)}/{bc}) for 95/50 regs.")
+            return None
+
+        if is_cell_data:
+            cell_res = _parse_battery_cells(db)
+            if cell_res:
+                 parsed_data[KEY_BATTERY_CELL_INFO] = cell_res
+        else:
+            addr = REG_ADDR
+            def rr(k, s, f=1.0, bc=2):
+                 r=addr.get(k)
+                 return _read_register(db,r,s,f,bc) if r is not None else None
+
+            # Read available values within 0-94 range
+            bat_volt = rr("BATTERY_VOLTAGE",False,0.01)
+            if bat_volt is not None: parsed_data[KEY_BATTERY_VOLTAGE] = bat_volt
+            bat_curr = rr("BATTERY_CURRENT",True,0.01)
+            if bat_curr is not None: parsed_data[KEY_BATTERY_CURRENT] = -bat_curr
+            ac_out_v = rr("AC_OUT_VOLTAGE",False,0.1)
+            if ac_out_v is not None: parsed_data[KEY_AC_OUT_VOLTAGE] = ac_out_v
+            grid_v = rr("GRID_VOLTAGE",False,0.1)
+            if grid_v is not None: parsed_data[KEY_GRID_VOLTAGE] = grid_v; parsed_data[KEY_AC_IN_VOLTAGE] = grid_v
+            ac_out_f = rr("AC_OUT_FREQ",False,0.01)
+            if ac_out_f is not None: parsed_data[KEY_AC_OUT_FREQ] = ac_out_f
+            ac_in_f = rr("AC_IN_FREQ",False,0.01)
+            if ac_in_f is not None: parsed_data[KEY_AC_IN_FREQ] = ac_in_f
+            temp_raw=rr("DEVICE_TEMP",True)
+            if temp_raw is not None: temp_c=round((temp_raw-1000)/10,1); parsed_data[KEY_DEVICE_TEMP]=temp_c if -40<temp_c<150 else None
+            pd_pv1_v=rr("PV1_VOLTAGE",False)
+            if pd_pv1_v is not None: parsed_data[KEY_PV1_VOLTAGE]=pd_pv1_v
+            pd_pv2_v=rr("PV2_VOLTAGE",False)
+            if pd_pv2_v is not None: parsed_data[KEY_PV2_VOLTAGE]=pd_pv2_v
+            pd_grid_p=rr("GRID_POWER",True)
+            if pd_grid_p is not None: parsed_data[KEY_GRID_POWER]=pd_grid_p
+            ac_in_p_r=rr("AC_IN_POWER",False)
+            pd_ac_in_p=round(ac_in_p_r/100,2) if ac_in_p_r is not None else None
+            if pd_ac_in_p is not None: parsed_data[KEY_AC_IN_POWER]=pd_ac_in_p
+            pd_load_p=rr("LOAD_POWER",False)
+            if pd_load_p is not None: parsed_data[KEY_LOAD_POWER]=pd_load_p
+            pd_ac_out_p=rr("AC_OUT_POWER",False)
+            if pd_ac_out_p is not None: parsed_data[KEY_AC_OUT_POWER]=pd_ac_out_p
+            pd_ac_out_va=rr("AC_OUT_VA",False)
+            if pd_ac_out_va is not None: parsed_data[KEY_AC_OUT_VA]=pd_ac_out_va
+            bp_s=rr("BATTERY_POWER",True)
+            if bp_s is not None: parsed_data[KEY_BATTERY_POWER], parsed_data[KEY_BATTERY_STATUS] = abs(bp_s), ("Charging" if bp_s < 0 else "Discharging")
+            else: parsed_data[KEY_BATTERY_POWER], parsed_data[KEY_BATTERY_STATUS] = None, "Unknown"
+            pd_grid_s="Importing" if parsed_data.get(KEY_GRID_POWER,0)>0 else "Exporting" if parsed_data.get(KEY_GRID_POWER) is not None else "Unknown"
+            parsed_data[KEY_GRID_STATUS] = pd_grid_s
+            pv1=rr("PV1_POWER",False); pv2=rr("PV2_POWER",False);
+            if pv1 is not None: parsed_data[KEY_PV1_POWER]=pv1
+            if pv2 is not None: parsed_data[KEY_PV2_POWER]=pv2
+            pd_pv_p=(pv1 or 0)+(pv2 or 0) if (pv1 is not None or pv2 is not None) else None
+            if pd_pv_p is not None: parsed_data[KEY_PV_POWER]=pd_pv_p
+            soc=rr("BATTERY_SOC",False); pd_soc=max(0,min(100,int(soc))) if soc is not None else None
+            if pd_soc is not None: parsed_data[KEY_BATTERY_SOC]=pd_soc
+            ups=rr("UPS_MODE",False); pd_ups=(ups==0) if ups is not None else None
+            if pd_ups is not None: parsed_data[KEY_IS_UPS_MODE]=pd_ups
+            bt=rr("BATTERY_TYPE",False); pd_bt=MAP_BATTERY_TYPE.get(int(bt),"Present") if bt is not None else None
+            if pd_bt is not None: parsed_data[KEY_BATTERY_TYPE]=pd_bt
+            pd_ms=rr("MASTER_SLAVE_STATUS",False)
+            if pd_ms is not None: parsed_data[KEY_MASTER_SLAVE_STATUS]=pd_ms
+            pd_sn=_read_string(db, addr["DEVICE_MODEL_START"], 5)
+            if pd_sn is not None: parsed_data[KEY_MQTT_DEVICE_SN]=pd_sn
+
+            _LOGGER.debug(f"Parsed main data final: {parsed_data}")
+
+    except Exception as e:
+        _LOGGER.exception(f"Parse error: {e}")
+        return None
+
     if parsed_data:
-        # Thêm trạng thái online nếu parse thành công
-        parsed_data[KEY_ONLINE_STATUS] = True
-        _LOGGER.info("++++ PARSING SUCCESSFUL (Restore Point 1) ++++")
+        data_type="Cells" if is_cell else "Main (Std)"
+        _LOGGER.info(f"++++ PARSE OK ({data_type}) ++++")
         return parsed_data
     else:
-        _LOGGER.warning(f"No relevant data could be parsed from payload: {payload_hex[:60]}...")
+        _LOGGER.warning(f"No data parsed: {resp_hex[:60]}...")
         return None

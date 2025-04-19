@@ -10,7 +10,7 @@
     "crcmod>=1.7"
   ],
   "codeowners": ["@vboyhn"],
-  "version": "1.4",
+  "version": "1.5",
   "iot_class": "local_polling",
   "loggers": [
     "paho",

@@ -1,235 +1,198 @@
 # /config/custom_components/lumentree/api.py
-# Version with HTTP KWh API logic
+# Final version - Fixed SyntaxError AGAIN in get_daily_stats try block
 
 import asyncio
 import json
 from typing import Any, Dict, Optional, Tuple
 import logging
+import time
 
 import aiohttp
 from aiohttp.client import ClientTimeout
 
 try:
-    # Import các URL mới và BASE_URL đã sửa (HTTP)
     from .const import (
-        BASE_URL, DEFAULT_HEADERS, URL_LOGIN_TOURIST, URL_DEVICE_INFO, _LOGGER,
+        BASE_URL, DEFAULT_HEADERS, _LOGGER,
+        URL_GET_SERVER_TIME, URL_SHARE_DEVICES, URL_DEVICE_MANAGE,
         URL_GET_OTHER_DAY_DATA, URL_GET_PV_DAY_DATA, URL_GET_BAT_DAY_DATA
     )
 except ImportError:
-    # Fallback
-    _LOGGER = logging.getLogger(__name__)
-    BASE_URL = "http://lesvr.suntcn.com" # Đảm bảo fallback dùng HTTP
-    URL_LOGIN_TOURIST = "/lesvr/shareDevices"
-    URL_DEVICE_INFO = "/lesvr/deviceInfo"
-    DEFAULT_HEADERS = {"User-Agent": "okhttp/3.12.0", "Accept": "application/json, text/plain, */*"}
-    URL_GET_OTHER_DAY_DATA = "/lesvr/getOtherDayData"
-    URL_GET_PV_DAY_DATA = "/lesvr/getPVDayData"
-    URL_GET_BAT_DAY_DATA = "/lesvr/getBatDayData"
+    _LOGGER = logging.getLogger(__name__); BASE_URL = "http://lesvr.suntcn.com"
+    URL_GET_SERVER_TIME = "/lesvr/getServerTime"; URL_SHARE_DEVICES = "/lesvr/shareDevices"
+    URL_DEVICE_MANAGE = "/lesvr/deviceManage";
+    URL_GET_OTHER_DAY_DATA = "/lesvr/getOtherDayData"; URL_GET_PV_DAY_DATA = "/lesvr/getPVDayData"; URL_GET_BAT_DAY_DATA = "/lesvr/getBatDayData"
+    DEFAULT_HEADERS = {"versionCode": "1.6.3", "platform": "2", "wifiStatus": "1", "User-Agent": "Mozilla/5.0", "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9"}
 
-
-DEFAULT_TIMEOUT = ClientTimeout(total=30) # Tăng timeout một chút cho API request
+DEFAULT_TIMEOUT = ClientTimeout(total=30)
+AUTH_RETRY_DELAY = 0.5
+AUTH_MAX_RETRIES = 3
 
 class ApiException(Exception): pass
 class AuthException(ApiException): pass
 
 class LumentreeHttpApiClient:
     """Handles HTTP Login, Device Info, and Daily Stats API calls."""
-
-    def __init__(self, session: aiohttp.ClientSession) -> None:
-        """Initialize the API client."""
-        self._session = session
-        self._token: Optional[str] = None # Thêm lại biến lưu token
-
-    def set_token(self, token: Optional[str]):
-        """Set the HTTP token obtained after login."""
-        self._token = token
-        _LOGGER.debug(f"HTTP API client token {'set' if token else 'cleared'}.")
+    def __init__(self, session: aiohttp.ClientSession) -> None: self._session = session; self._token: Optional[str] = None
+    def set_token(self, token: Optional[str]): self._token = token; _LOGGER.debug(f"API token {'set' if token else 'cleared'}.")
 
     async def _request(
-        self, method: str, endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
-        requires_auth: bool = True # Mặc định API cần xác thực
+        self, method: str, endpoint: str, params: Optional[Dict[str, Any]] = None, data: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None, requires_auth: bool = True
     ) -> Dict[str, Any]:
-        """Make an HTTP request."""
-        url = f"{BASE_URL}{endpoint}"
-        headers = DEFAULT_HEADERS.copy()
-
-        # <<< SỬA LẠI: Dùng header Authorization >>>
+        url = f"{BASE_URL}{endpoint}"; headers = DEFAULT_HEADERS.copy();
+        if extra_headers: headers.update(extra_headers)
         if requires_auth:
-            if self._token:
-                headers["Authorization"] = self._token # <<< Dùng Authorization
-                _LOGGER.debug(f"Adding Authorization header for request to {endpoint}")
-            else:
-                _LOGGER.error(f"Token required for {endpoint} but none set.")
-                raise AuthException(f"Authentication token required for {endpoint}")
-
-        _LOGGER.debug(f"HTTP Request: {method} {url}, Params: {params}, Data: {data}")
+            if self._token: headers["Authorization"] = self._token
+            else: _LOGGER.error(f"Token needed for {endpoint}"); raise AuthException("Token required")
+        if data and method.upper() == "POST": headers["Content-Type"] = headers.get("Content-Type", "application/x-www-form-urlencoded")
+        _LOGGER.debug(f"HTTP Req: {method} {url}, H: {headers}, P: {params}, D: {data}")
         try:
-            async with self._session.request(
-                method, url, headers=headers, params=params, data=data, timeout=DEFAULT_TIMEOUT
-            ) as response:
-                _LOGGER.debug(f"HTTP Response Status: {response.status} from {url}")
-                resp_text_short = ""
-                try:
-                    # Xử lý response JSON
-                    if 'application/json' in response.headers.get('Content-Type', ''):
-                        resp_json = await response.json(content_type=None)
-                        _LOGGER.debug(f"HTTP Response JSON: {resp_json}")
-                    elif response.ok:
-                        resp_text = await response.text()
-                        resp_text_short = resp_text[:200]
-                        _LOGGER.warning(f"Non-JSON response with OK status from {url}. Text: {resp_text_short}")
-                        return {"returnValue": 1, "data": {}, "msg": "OK, non-JSON response"}
-                    else:
-                         response.raise_for_status()
-
-                except (json.JSONDecodeError, aiohttp.ContentTypeError) as json_err:
-                    if not resp_text_short: resp_text_short = (await response.text())[:200]
-                    _LOGGER.error(f"Invalid JSON response from {url}: {resp_text_short}")
-                    raise ApiException(f"Invalid JSON response: {resp_text_short}") from json_err
-
-                # Kiểm tra returnValue
+            async with self._session.request(method, url, headers=headers, params=params, data=data, timeout=DEFAULT_TIMEOUT) as response:
+                _LOGGER.debug(f"HTTP Resp Status: {response.status} from {url}"); resp_text = await response.text(); resp_text_short = resp_text[:300]
+                try: resp_json = await response.json(content_type=None); _LOGGER.debug(f"HTTP Resp JSON: {resp_json}")
+                except (json.JSONDecodeError, aiohttp.ContentTypeError) as json_err: _LOGGER.error(f"Invalid JSON {url}: {resp_text_short}"); raise ApiException(f"Invalid JSON: {resp_text_short}") from json_err
+                if not response.ok and not resp_json: response.raise_for_status()
                 return_value = resp_json.get("returnValue")
-                msg = resp_json.get("msg", "Unknown API error")
+                if endpoint == URL_GET_SERVER_TIME and "data" in resp_json and "serverTime" in resp_json["data"]: return resp_json
                 if return_value != 1:
-                    _LOGGER.error(f"API Error: {url}, RC={return_value}, Msg='{msg}'")
-                    if return_value == 203: # Mã lỗi auth từ server
-                        raise AuthException(f"Auth failed (RC=203): {msg}")
-                    # Lỗi API chung
-                    raise ApiException(f"API error: {msg} (Code: {return_value})")
+                    msg = resp_json.get("msg", "Unknown"); _LOGGER.error(f"API Error {url}: RC={return_value}, Msg='{msg}'")
+                    if return_value == 203 or response.status in [401, 403]: raise AuthException(f"Auth failed (RC={return_value}, HTTP={response.status}): {msg}")
+                    raise ApiException(f"API error {msg} (RC={return_value})")
                 return resp_json
-
-        except asyncio.TimeoutError as exc:
-            _LOGGER.error(f"Timeout reaching {url}")
-            raise ApiException(f"Timeout reaching {url}") from exc
+        except asyncio.TimeoutError as exc: _LOGGER.error(f"Timeout {url}"); raise ApiException("Timeout") from exc
         except aiohttp.ClientResponseError as exc:
-            # Phân biệt lỗi auth rõ hơn
-            if exc.status in [401, 403]:
-                raise AuthException(f"Authorization error ({exc.status}): {exc.message}")
-            _LOGGER.error(f"HTTP error from {url}: {exc.status} {exc.message}")
-            raise ApiException(f"HTTP error: {exc.status} {exc.message}") from exc
-        except aiohttp.ClientError as exc:
-            _LOGGER.error(f"Client error during request to {url}: {exc}")
-            raise ApiException(f"Client error: {exc}") from exc
-        except Exception as exc:
-            _LOGGER.exception(f"Unexpected HTTP error during request to {url}")
-            raise ApiException(f"Unexpected: {exc}")
+            if exc.status in [401, 403]: raise AuthException(f"Auth error ({exc.status}): {exc.message}") from exc
+            _LOGGER.error(f"HTTP error {url}: {exc.status}"); raise ApiException(f"HTTP error: {exc.status}") from exc
+        except aiohttp.ClientError as exc: _LOGGER.error(f"Client error {url}: {exc}"); raise ApiException(f"Client error: {exc}") from exc
+        except AuthException: raise
+        except ApiException: raise
+        except Exception as exc: _LOGGER.exception(f"Unexpected HTTP error {url}"); raise ApiException(f"Unexpected: {exc}") from exc
 
-    async def authenticate_guest(self, qr_content: str) -> Tuple[Optional[int], Optional[str], Optional[str]]:
-        """Authenticate using QR code. Returns (uid, device_id_from_qr, http_token)."""
-        _LOGGER.info("Attempting guest authentication via HTTP")
-        if not qr_content:
-            raise AuthException("QR Code content missing")
+    async def _get_server_time(self) -> Optional[int]:
+        _LOGGER.debug("Fetching server time...")
         try:
-            qr_data = json.loads(qr_content)
-            device_id_qr = qr_data.get("devices")
-            server_time = qr_data.get("expiryTime")
-            if not device_id_qr or not server_time:
-                raise ValueError("Invalid QR format (missing 'devices' or 'expiryTime')")
+            resp = await self._request("GET", URL_GET_SERVER_TIME, requires_auth=False)
+            t = resp.get("data", {}).get("serverTime")
+            return int(t) if t else None
+        except Exception as e:
+            _LOGGER.exception(f"Failed get server time: {e}")
+            return None
 
-            payload = {"deviceIds": device_id_qr, "serverTime": server_time}
-            # Gọi login không cần auth
-            response_json = await self._request("POST", URL_LOGIN_TOURIST, data=payload, requires_auth=False)
-            response_data = response_json.get("data", {})
-            uid = response_data.get("uid")
-            http_token = response_data.get("token") # <<< Lấy token
+    async def _get_token(self, device_id: str, server_time: int) -> Optional[str]:
+        _LOGGER.debug(f"Requesting token {device_id} @ {server_time}")
+        try:
+            payload = {"deviceIds": device_id, "serverTime": str(server_time)}
+            headers = {"source": "2", "Content-Type": "application/x-www-form-urlencoded"}
+            resp = await self._request("POST", URL_SHARE_DEVICES, data=payload, extra_headers=headers, requires_auth=False)
+            token = resp.get("data", {}).get("token")
+            return token if token else None
+        except Exception as e:
+            _LOGGER.exception(f"Failed get token: {e}")
+            return None
 
-            if uid is not None:
-                _LOGGER.info(f"Guest auth successful. UID: {uid}, Token: {'****' if http_token else 'N/A'}")
-                try:
-                    # <<< Trả về cả 3 giá trị >>>
-                    return int(uid), device_id_qr, http_token
-                except (ValueError, TypeError):
-                     _LOGGER.error("Could not parse UID to int.")
-                     return None, None, None
-            else:
-                raise AuthException("Login succeeded but UID missing in response.")
-        except (json.JSONDecodeError, ValueError) as exc:
-            _LOGGER.error(f"Invalid QR JSON: {exc}")
-            raise AuthException(f"Invalid QR JSON: {exc}") from exc
-        # Các exception ApiException, AuthException từ _request sẽ được raise lên
+    async def authenticate_device(self, device_id: str) -> str:
+        _LOGGER.info(f"Authenticating {device_id}"); last_exc: Optional[Exception] = None
+        for attempt in range(AUTH_MAX_RETRIES):
+            try:
+                server_time = await self._get_server_time()
+                if not server_time: raise ApiException("Failed to get server time for token request.")
+                token = await self._get_token(device_id, server_time)
+                if not token: raise AuthException(f"Failed get token (attempt {attempt+1})")
+                _LOGGER.info(f"Auth success {device_id}"); self.set_token(token); return token
+            except (ApiException, AuthException) as exc: _LOGGER.warning(f"Auth attempt {attempt+1} fail: {exc}"); last_exc = exc
+            except Exception as exc: _LOGGER.exception(f"Unexpected auth err {attempt+1}"); last_exc = AuthException(f"Unexpected: {exc}")
+            # Sleep only if not the last attempt
+            if attempt < AUTH_MAX_RETRIES - 1: await asyncio.sleep(AUTH_RETRY_DELAY)
+
+        _LOGGER.error(f"Auth failed after {AUTH_MAX_RETRIES} attempts.");
+        if last_exc: raise last_exc
+        else: raise AuthException("Auth failed (Unknown reason)")
 
     async def get_device_info(self, device_id: str) -> Dict[str, Any]:
-        """Fetch detailed device info. Uses token if set via Authorization header."""
-        _LOGGER.debug(f"Fetching HTTP device info for ID: {device_id}")
-        if not device_id:
-            _LOGGER.warning("Device ID is missing for get_device_info.")
-            return {"_error": "Device ID missing"}
+        _LOGGER.debug(f"Fetching HTTP device info for ID: {device_id} using {URL_DEVICE_MANAGE}")
+        if not device_id: _LOGGER.warning("Device ID missing."); return {"_error": "Device ID missing"}
         try:
-            params = {"deviceId": device_id}
-            # Gọi _request mặc định requires_auth=True
-            response_json = await self._request("GET", URL_DEVICE_INFO, params=params)
+            params = {"page": "1", "snName": device_id}
+            response_json = await self._request("POST", URL_DEVICE_MANAGE, params=params, requires_auth=True)
             response_data = response_json.get("data", {})
-            return response_data if isinstance(response_data, dict) else {}
-        except (ApiException, AuthException) as exc: # Bắt cả lỗi Auth
-            _LOGGER.error(f"Failed get device info for {device_id}: {exc}")
-            return {"_error": str(exc)}
+            devices_list = response_data.get("devices") if isinstance(response_data, dict) else None
+            if isinstance(devices_list, list) and len(devices_list) > 0:
+                device_info_dict = devices_list[0]
+                if isinstance(device_info_dict, dict):
+                    _LOGGER.debug(f"Device info via HTTP ({URL_DEVICE_MANAGE}): {device_info_dict}")
+                    _LOGGER.info(f"API Info: ID={device_info_dict.get('deviceId')}, Type={device_info_dict.get('deviceType')}, Ctrl={device_info_dict.get('controllerVersion')}, Lcd={device_info_dict.get('liquidCrystalVersion')}")
+                    return device_info_dict
+                else: _LOGGER.warning(f"Invalid data: {device_info_dict}"); return {"_error": "Invalid data format"}
+            else: _LOGGER.warning(f"No devices list/empty {device_id}"); return {"_error": "Device not found or empty"}
+        except (ApiException, AuthException) as exc: _LOGGER.error(f"Failed get info {device_id}: {exc}"); raise
+        except Exception as exc: _LOGGER.exception(f"Unexpected get info {device_id}"); return {"_error": f"Unexpected: {exc}"}
 
-    # --- HÀM GỌI API THỐNG KÊ NGÀY (ĐÃ SỬA) ---
-    async def get_daily_stats(self, device_sn: str, query_date: str) -> Dict[str, Optional[float]]:
-        """
-        Fetch all daily statistics (PV, Bat, Grid, Load) for a specific date.
-        Uses GET requests with query parameters and Authorization header.
-        Returns a dictionary with aggregated kWh values (already divided by 10).
-        Keys match KEY_DAILY_* in const.py (e.g., "pv_today").
-        """
-        _LOGGER.debug(f"Fetching daily stats for SN: {device_sn}, Date: {query_date}")
-        # Các key trả về phải khớp với KEY_DAILY_* trong const.py
-        results = {
-            "pv_today": None,
-            "charge_today": None,
-            "discharge_today": None,
-            "grid_in_today": None,
-            "load_today": None,
+    # --- SỬA HÀM NÀY ---
+    async def get_daily_stats(self, device_identifier: str, query_date: str) -> Dict[str, Optional[float]]:
+        _LOGGER.debug(f"Fetching daily stats {device_identifier} @ {query_date}")
+        results: Dict[str, Optional[float]] = {
+            "pv_today": None, "charge_today": None, "discharge_today": None,
+            "grid_in_today": None, "load_today": None
         }
-        # <<< Sửa key tham số thành 'deviceId' >>>
-        base_params = {"deviceId": device_sn, "queryDate": query_date}
+        base_params = {"deviceId": device_identifier, "queryDate": query_date}
 
-        # Chạy các request tuần tự để dễ debug
-        try:
-            # <<< Dùng GET và params >>>
-            pv_resp = await self._request("GET", URL_GET_PV_DAY_DATA, params=base_params)
-            pv_data = pv_resp.get("data", {}).get("pv", {})
-            if pv_data and "tableValue" in pv_data:
-                results["pv_today"] = float(pv_data["tableValue"]) / 10.0
-        except (ApiException, AuthException) as e:
-            _LOGGER.warning(f"Failed to get PV daily data ({type(e).__name__}): {e}")
-        except Exception as e: # Bắt lỗi khác (vd: float conversion)
-             _LOGGER.exception(f"Unexpected error processing PV daily data: {e}")
+        # Define API calls configuration
+        api_calls_config = [
+            {"url": URL_GET_PV_DAY_DATA, "data_key": "pv", "result_key": "pv_today"},
+            {"url": URL_GET_BAT_DAY_DATA, "data_key": "bats", "result_key": ["charge_today", "discharge_today"]},
+            {"url": URL_GET_OTHER_DAY_DATA, "data_key": ["grid", "homeload"], "result_key": ["grid_in_today", "load_today"]},
+        ]
 
+        # Loop through each API call configuration
+        for config in api_calls_config:
+            url = config["url"]
+            data_key = config["data_key"]
+            result_key = config["result_key"]
 
-        try:
-            # <<< Dùng GET và params >>>
-            bat_resp = await self._request("GET", URL_GET_BAT_DAY_DATA, params=base_params)
-            bat_data_list = bat_resp.get("data", {}).get("bats", [])
-            if isinstance(bat_data_list, list):
-                 # Giả định list[0] là Charge, list[1] là Discharge
-                 if len(bat_data_list) > 0 and "tableValue" in bat_data_list[0]:
-                      results["charge_today"] = float(bat_data_list[0]["tableValue"]) / 10.0
-                 if len(bat_data_list) > 1 and "tableValue" in bat_data_list[1]:
-                      results["discharge_today"] = float(bat_data_list[1]["tableValue"]) / 10.0
-        except (ApiException, AuthException) as e:
-            _LOGGER.warning(f"Failed to get Battery daily data ({type(e).__name__}): {e}")
-        except Exception as e:
-             _LOGGER.exception(f"Unexpected error processing Battery daily data: {e}")
+            try: # <<< Khối try bao quanh mỗi lệnh gọi API >>>
+                resp = await self._request("GET", url, params=base_params, requires_auth=True)
+                data = resp.get("data", {})
 
-        try:
-            # <<< Dùng GET và params >>>
-            other_resp = await self._request("GET", URL_GET_OTHER_DAY_DATA, params=base_params)
-            other_data = other_resp.get("data", {})
-            grid_data = other_data.get("grid", {})
-            load_data = other_data.get("homeload", {}) # Giả định homeload là total load
-            if grid_data and "tableValue" in grid_data:
-                 results["grid_in_today"] = float(grid_data["tableValue"]) / 10.0
-            if load_data and "tableValue" in load_data:
-                 results["load_today"] = float(load_data["tableValue"]) / 10.0
-        except (ApiException, AuthException) as e:
-            _LOGGER.warning(f"Failed to get Other (Grid/Load) daily data ({type(e).__name__}): {e}")
-        except Exception as e:
-             _LOGGER.exception(f"Unexpected error processing Other daily data: {e}")
+                # Process based on data_key type
+                if isinstance(data_key, list): # Handle multiple keys (Other data)
+                    for i, dk in enumerate(data_key):
+                        item_data = data.get(dk, {})
+                        val = item_data.get("tableValue")
+                        rk = result_key[i]
+                        if val is not None:
+                             # Check if rk is a valid key before assigning
+                            if rk in results:
+                                results[rk] = float(val) / 10.0
+                            else:
+                                 _LOGGER.warning(f"Result key '{rk}' not defined in results dict.")
+                elif data_key == "bats": # Handle battery list
+                    bats_data = data.get(data_key, [])
+                    if isinstance(bats_data, list):
+                        rk_charge, rk_discharge = result_key[0], result_key[1]
+                        if len(bats_data) > 0 and "tableValue" in bats_data[0]:
+                             if rk_charge in results: results[rk_charge] = float(bats_data[0]["tableValue"]) / 10.0
+                        if len(bats_data) > 1 and "tableValue" in bats_data[1]:
+                             if rk_discharge in results: results[rk_discharge] = float(bats_data[1]["tableValue"]) / 10.0
+                else: # Handle single key (PV data)
+                    item_data = data.get(data_key, {})
+                    val = item_data.get("tableValue")
+                    # Ensure result_key is a string and exists in results
+                    if isinstance(result_key, str) and result_key in results:
+                         if val is not None: results[result_key] = float(val) / 10.0
+                    else:
+                         _LOGGER.warning(f"Result key '{result_key}' not valid or not defined.")
 
-        _LOGGER.debug(f"Fetched daily stats results for {query_date}: {results}")
-        # Chỉ trả về các giá trị khác None để coordinator biết key nào thực sự có dữ liệu
+            # <<< Khối except tương ứng với try ở trên >>>
+            except (ApiException, AuthException) as e:
+                _LOGGER.warning(f"Failed {result_key} stats ({type(e).__name__}): {e}")
+                # Don't raise here to allow other stats calls to proceed,
+                # but if it's an Auth error, the coordinator should eventually fail.
+                if isinstance(e, AuthException):
+                     # Optionally raise immediately if auth failure should stop all stats
+                     # raise
+                     pass # Continue for now
+            except Exception:
+                _LOGGER.exception(f"Unexpected {result_key} stats error")
+
+        _LOGGER.debug(f"Processed daily stats: {results}")
         return {k: v for k, v in results.items() if v is not None}
-    # --- KẾT THÚC HÀM API STATS ---

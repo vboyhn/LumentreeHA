@@ -1,5 +1,5 @@
 # /config/custom_components/lumentree/__init__.py
-# Fixed UpdateFailed import
+# Fixed SyntaxError in fallback definitions (again)
 
 import asyncio
 import time
@@ -16,167 +16,164 @@ import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant, Event
-from homeassistant.exceptions import ConfigEntryNotReady, ConfigEntryAuthFailed # Bỏ UpdateFailed ở đây
-from homeassistant.helpers.update_coordinator import UpdateFailed # <<< THÊM IMPORT TỪ ĐÂY
+from homeassistant.exceptions import ConfigEntryNotReady, ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers.device_registry import DeviceEntry
 
 try:
-    # Import đầy đủ các thành phần cần thiết
+    # Import các const đã cập nhật
     from .const import (
-        DOMAIN, _LOGGER, CONF_DEVICE_SN, CONF_USER_ID, MQTT_BROKER,
-        DEFAULT_POLLING_INTERVAL,
-        CONF_HTTP_TOKEN
+        DOMAIN, _LOGGER, CONF_DEVICE_SN, CONF_DEVICE_ID,
+        MQTT_BROKER, DEFAULT_POLLING_INTERVAL, CONF_HTTP_TOKEN, DEFAULT_STATS_INTERVAL
     )
     from .mqtt import LumentreeMqttClient
     from .api import LumentreeHttpApiClient, AuthException, ApiException
     from .coordinator_stats import LumentreeStatsCoordinator
 except ImportError as import_err:
-    # Fallback
+    # --- Fallback Definitions (Sửa lỗi cú pháp) ---
     _LOGGER = logging.getLogger(__name__)
     _LOGGER.error(f"ImportError during component setup: {import_err}. Using fallback definitions.")
-    DOMAIN = "lumentree"; CONF_DEVICE_SN = "device_sn"; CONF_USER_ID = "user_id"; MQTT_BROKER = "lesvr.suntcn.com"
-    DEFAULT_POLLING_INTERVAL = 15; CONF_HTTP_TOKEN = "http_token"
+    DOMAIN = "lumentree"; CONF_DEVICE_SN = "device_sn"; CONF_DEVICE_ID = "device_id";
+    MQTT_BROKER = "lesvr.suntcn.com"; DEFAULT_POLLING_INTERVAL = 5; CONF_HTTP_TOKEN = "http_token"; DEFAULT_STATS_INTERVAL = 600
+
+    # Fallback Class MQTT
     class LumentreeMqttClient:
-        async def connect(self): pass
-        async def disconnect(self): pass
-        async def async_request_data(self): pass
+        def __init__(self, hass, entry, device_sn, device_id): pass
+        async def connect(self): _LOGGER.warning("Using fallback MQTT connect"); await asyncio.sleep(0)
+        async def disconnect(self): _LOGGER.warning("Using fallback MQTT disconnect"); await asyncio.sleep(0)
+        async def async_request_data(self): _LOGGER.warning("Using fallback MQTT request_data"); await asyncio.sleep(0)
+        async def async_request_battery_cells(self): _LOGGER.warning("Using fallback MQTT request_cells"); await asyncio.sleep(0)
         @property
-        def is_connected(self): return False
+        def is_connected(self) -> bool: return False
+
+    # Fallback Class API
     class LumentreeHttpApiClient:
-         def __init__(self, session): pass
-         def set_token(self, token): pass
-         async def authenticate_guest(self, qr): return None, None, None
-         async def get_device_info(self, dev_id): return {}
-         async def get_daily_stats(self, sn, date): return {}
+        def __init__(self, session): pass
+        def set_token(self, token): pass
+        async def authenticate_device(self, dev_id): _LOGGER.warning("Using fallback API authenticate"); return "fallback_token"
+        async def get_device_info(self, dev_id): _LOGGER.warning("Using fallback API get_info"); return {"deviceId": dev_id, "deviceType": "Fallback Model"}
+        async def get_daily_stats(self, sn, date): _LOGGER.warning("Using fallback API get_stats"); return {}
+
+    # Fallback Class Coordinator
     class LumentreeStatsCoordinator:
-         def __init__(self, hass, client, sn): pass
-         async def async_config_entry_first_refresh(self): pass
-         async def async_refresh(self): pass
-         @property
-         def data(self): return {}
-         last_update_success = False
-    # Fallback cho exceptions
-    class AuthException(Exception): pass
-    class ApiException(Exception): pass
-    try: # Thử import lại UpdateFailed từ đúng chỗ
+        def __init__(self, hass, client, sn): pass
+        async def async_config_entry_first_refresh(self): _LOGGER.warning("Using fallback Coordinator refresh"); await asyncio.sleep(0)
+        async def async_refresh(self): _LOGGER.warning("Using fallback Coordinator refresh"); await asyncio.sleep(0)
+        @property
+        def data(self): return {}
+        last_update_success = False
+
+    # Fallback Exceptions (Tách class ra dòng riêng)
+    class AuthException(Exception):
+        pass
+    class ApiException(Exception):
+        pass
+    try:
         from homeassistant.helpers.update_coordinator import UpdateFailed
     except ImportError:
-        class UpdateFailed(Exception): pass # Fallback cuối cùng
-    try: # Thử import ConfigEntryAuthFailed
+        class UpdateFailed(Exception): # <<< Tách class ra dòng riêng
+            pass
+    try:
         from homeassistant.exceptions import ConfigEntryAuthFailed
     except ImportError:
-        class ConfigEntryAuthFailed(Exception): pass # Fallback cuối cùng
+        class ConfigEntryAuthFailed(Exception): # <<< Tách class ra dòng riêng
+            pass
+    # --- Hết phần Fallback ---
+
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
-# --- async_setup_entry và async_unload_entry giữ nguyên như phiên bản trước ---
-# Đảm bảo phần try...except trong async_setup_entry bắt đúng UpdateFailed
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Lumentree from a config entry."""
-    _LOGGER.info(f"Setting up Lumentree integration for: {entry.title}")
+    _LOGGER.info(f"Setting up Lumentree: {entry.title} ({entry.entry_id})")
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
+    api_client: Optional[LumentreeHttpApiClient] = None
 
     try:
-        device_sn = entry.data[CONF_DEVICE_SN]
-        user_id = entry.data[CONF_USER_ID]
+        device_sn = entry.data[CONF_DEVICE_SN] # This is the deviceId used as HA unique ID
+        device_id = entry.data.get(CONF_DEVICE_ID, device_sn) # Original user input or fallback
         http_token = entry.data.get(CONF_HTTP_TOKEN)
-        if not http_token: _LOGGER.warning("HTTP Token not found. Stats fetching might fail.")
-    except KeyError as err:
-        _LOGGER.error(f"Missing required config entry data: {err}")
+        if not http_token: _LOGGER.warning(f"HTTP Token missing for {device_sn}.")
+        if device_id != entry.data.get(CONF_DEVICE_ID): _LOGGER.warning(f"Using SN {device_sn} as Device ID.")
+
+        session = async_get_clientsession(hass)
+        api_client = LumentreeHttpApiClient(session)
+        api_client.set_token(http_token)
+        hass.data[DOMAIN][entry.entry_id]["api_client"] = api_client
+
+        _LOGGER.info(f"Fetching device info via HTTP for {device_id}...")
+        try:
+            device_api_info = await api_client.get_device_info(device_id)
+            if "_error" in device_api_info:
+                 _LOGGER.warning(f"Could not fetch device info setup: {device_api_info['_error']}. Using fallback.")
+                 hass.data[DOMAIN][entry.entry_id]['device_api_info'] = {"deviceId": device_sn, "alias": entry.title}
+            else:
+                 hass.data[DOMAIN][entry.entry_id]['device_api_info'] = device_api_info
+                 _LOGGER.info(f"Stored API info: Model={device_api_info.get('deviceType')}, ID={device_api_info.get('deviceId')}")
+        except (ApiException, AuthException) as api_err:
+             _LOGGER.error(f"Failed initial device info fetch {device_id}: {api_err}.")
+             raise ConfigEntryNotReady(f"Failed device info: {api_err}") from api_err
+
+        mqtt_client = LumentreeMqttClient(hass, entry, device_sn, device_id) # Pass HA SN (deviceId) and original ID
+        hass.data[DOMAIN][entry.entry_id]["mqtt_client"] = mqtt_client
+        await mqtt_client.connect()
+
+        coordinator_stats = LumentreeStatsCoordinator(hass, api_client, device_sn) # Use HA SN (deviceId) for coordinator ID and API calls
+        hass.data[DOMAIN][entry.entry_id]["coordinator_stats"] = coordinator_stats
+        try:
+             await coordinator_stats.async_config_entry_first_refresh()
+             _LOGGER.debug(f"Initial stats fetch {device_sn}: Success={coordinator_stats.last_update_success}")
+             if not coordinator_stats.last_update_success: _LOGGER.warning(f"Initial stats fetch failed {device_sn}.")
+        except ConfigEntryAuthFailed: _LOGGER.error(f"HTTP Auth failed for stats {device_sn}."); pass
+        except UpdateFailed: _LOGGER.warning(f"Initial stats fetch failed {device_sn}.")
+        except Exception: _LOGGER.exception(f"Unexpected initial stats error {device_sn}")
+
+        polling_interval = datetime.timedelta(seconds=DEFAULT_POLLING_INTERVAL)
+        remove_interval: Optional[Callable] = None
+        async def _async_poll_data(now=None):
+            _LOGGER.debug(f"MQTT Poll {device_sn}."); entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+            if not entry_data: _LOGGER.warning(f"Data missing {entry.entry_id}. Stop poll."); timer = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).pop("remove_interval", None); timer(); return # type: ignore
+            active_mqtt_client = entry_data.get("mqtt_client")
+            if not isinstance(active_mqtt_client, LumentreeMqttClient) or not active_mqtt_client.is_connected: _LOGGER.warning(f"MQTT {device_sn} not ready."); return
+            try: _LOGGER.debug(f"Req MQTT {device_sn}..."); await active_mqtt_client.async_request_data(); await active_mqtt_client.async_request_battery_cells(); _LOGGER.debug(f"MQTT req sent {device_sn}.")
+            except Exception as poll_err: _LOGGER.error(f"MQTT poll error {device_sn}: {poll_err}")
+
+        remove_interval = async_track_time_interval(hass, _async_poll_data, polling_interval)
+        hass.data[DOMAIN][entry.entry_id]["remove_interval"] = remove_interval
+        _LOGGER.info(f"Started MQTT polling {polling_interval} for {device_sn}")
+
+        async def _cancel_timer_on_unload(): _LOGGER.debug(f"Unload: Cancelling MQTT timer {device_sn}."); timer = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).pop("remove_interval", None); timer() # type: ignore
+        async def _async_stop_mqtt(event: Event) -> None: _LOGGER.info("HA stop."); mqtt_client = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("mqtt_client"); await mqtt_client.disconnect() # type: ignore
+
+        entry.async_on_unload(_cancel_timer_on_unload)
+        entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop_mqtt))
+
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        _LOGGER.info(f"Setup complete for {entry.title} (SN/ID: {device_sn})")
+        return True
+
+    except ConfigEntryNotReady as e:
+        _LOGGER.warning(f"Setup failed for {entry.title}: {e}. Cleaning up...")
+        mqtt_client = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("mqtt_client")
+        if isinstance(mqtt_client, LumentreeMqttClient): await mqtt_client.disconnect()
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+        raise
+    except Exception as final_exception:
+        _LOGGER.exception(f"Unexpected setup error {entry.title}")
+        mqtt_client = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("mqtt_client")
+        if isinstance(mqtt_client, LumentreeMqttClient): await mqtt_client.disconnect()
         hass.data[DOMAIN].pop(entry.entry_id, None)
         return False
 
-    session = async_get_clientsession(hass)
-    api_client = LumentreeHttpApiClient(session)
-    api_client.set_token(http_token)
-    hass.data[DOMAIN][entry.entry_id]["api_client"] = api_client
-
-    client_id = f"android-{user_id}-{int(time.time())}"
-    mqtt_client = LumentreeMqttClient(hass, entry, client_id, device_sn)
-    hass.data[DOMAIN][entry.entry_id]["mqtt_client"] = mqtt_client
-
-    try:
-        await mqtt_client.connect()
-    except (ConnectionRefusedError, asyncio.TimeoutError, ApiException) as conn_err:
-        _LOGGER.error(f"Failed initial MQTT connection: {conn_err}")
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-        raise ConfigEntryNotReady(f"MQTT connection failed: {conn_err}") from conn_err
-    except Exception as e:
-        _LOGGER.exception("Unexpected error during MQTT connection setup")
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-        raise ConfigEntryNotReady(f"Unexpected MQTT setup error: {e}") from e
-
-    coordinator_stats = LumentreeStatsCoordinator(hass, api_client, device_sn)
-    try:
-        _LOGGER.debug("Performing initial fetch for daily stats coordinator...")
-        await coordinator_stats.async_config_entry_first_refresh()
-        _LOGGER.debug(f"Initial stats fetch completed. Success: {coordinator_stats.last_update_success}")
-        if not coordinator_stats.last_update_success:
-             _LOGGER.warning("Initial daily stats fetch failed. Check logs. Will retry later.")
-    except ConfigEntryAuthFailed as auth_fail:
-         _LOGGER.error(f"Auth failed during initial stats fetch: {auth_fail}. Check config.")
-         pass
-    except UpdateFailed as update_fail: # <<< Bắt đúng exception này
-         _LOGGER.warning(f"Initial daily stats fetch failed: {update_fail}. Will retry later.")
-    except Exception as e:
-         _LOGGER.exception("Unexpected error during initial stats coordinator refresh")
-    hass.data[DOMAIN][entry.entry_id]["coordinator_stats"] = coordinator_stats
-
-    polling_interval = datetime.timedelta(seconds=DEFAULT_POLLING_INTERVAL)
-    remove_interval: Optional[Callable] = None
-
-    async def _async_poll_data(now=None):
-        """Callback function to poll MQTT data."""
-        _LOGGER.debug("MQTT Polling timer triggered.")
-        entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-        if not entry_data:
-             _LOGGER.warning("Entry data not found during MQTT poll. Stopping poll.")
-             if remove_interval: remove_interval()
-             return
-
-        active_mqtt_client = entry_data.get("mqtt_client")
-        if not isinstance(active_mqtt_client, LumentreeMqttClient) or not active_mqtt_client.is_connected:
-             _LOGGER.warning("MQTT client not connected/ready, skipping MQTT data request.")
-             return
-
-        _LOGGER.debug("Requesting real-time data via MQTT...")
-        try:
-            await active_mqtt_client.async_request_data()
-        except Exception as poll_err:
-             _LOGGER.error(f"Error during MQTT data request polling: {poll_err}")
-
-    await _async_poll_data()
-    remove_interval = async_track_time_interval(hass, _async_poll_data, polling_interval)
-    _LOGGER.info(f"Started MQTT polling every {polling_interval}")
-
-    async def _unload_wrapper():
-        """Clean up resources when entry is unloaded."""
-        _LOGGER.debug(f"Unloading entry {entry.entry_id}...")
-        if remove_interval: remove_interval(); _LOGGER.debug("MQTT polling timer cancelled.")
-        entry_data_to_unload = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-        if entry_data_to_unload:
-            client_to_unload = entry_data_to_unload.get("mqtt_client")
-            if isinstance(client_to_unload, LumentreeMqttClient):
-                _LOGGER.debug("Disconnecting MQTT client during unload.")
-                await client_to_unload.disconnect()
-            _LOGGER.debug(f"Removed entry data for {entry.entry_id}.")
-
-    async def _async_stop_mqtt(event: Event) -> None:
-        """Ensure MQTT disconnect when Home Assistant stops."""
-        _LOGGER.info("Home Assistant stopping event received.")
-
-    entry.async_on_unload(_unload_wrapper)
-    entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop_mqtt))
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    _LOGGER.info(f"Successfully set up Lumentree integration for {entry.title}")
-    return True
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    _LOGGER.info(f"Unloading Lumentree integration for: {entry.title}")
+    _LOGGER.info(f"Unloading Lumentree: {entry.title} (SN/ID: {entry.data.get(CONF_DEVICE_SN)})")
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok: _LOGGER.info(f"Successfully unloaded Lumentree integration for {entry.title}.")
-    else: _LOGGER.warning(f"Failed to cleanly unload Lumentree platforms for {entry.title}.")
+    entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    if entry_data:
+        mqtt_client = entry_data.get("mqtt_client")
+        if isinstance(mqtt_client, LumentreeMqttClient): _LOGGER.debug(f"Disconnecting MQTT {entry.data.get(CONF_DEVICE_SN)}."); hass.async_create_task(mqtt_client.disconnect())
+        _LOGGER.debug(f"Removed entry data {entry.entry_id}.")
+    else: _LOGGER.warning(f"No entry data {entry.entry_id} to clean.")
+    _LOGGER.info(f"Unload {entry.title}: {'OK' if unload_ok else 'Failed'}.")
     return unload_ok

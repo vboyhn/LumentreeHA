@@ -1,5 +1,5 @@
 # /config/custom_components/lumentree/config_flow.py
-# Version to Save HTTP Token
+# Final version - Add robustness to _get_api_client
 
 import json
 import time
@@ -12,168 +12,139 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-# Import các const cần thiết, bao gồm cả CONF_HTTP_TOKEN
 try:
     from .const import (
-        DOMAIN, CONF_QR_CONTENT, CONF_DEVICE_ID,
-        CONF_DEVICE_SN, CONF_DEVICE_NAME, CONF_USER_ID, CONF_HTTP_TOKEN, # <<< Thêm CONF_HTTP_TOKEN
-        AUTH_METHOD_GUEST, CONF_AUTH_METHOD, _LOGGER
+        DOMAIN, CONF_DEVICE_ID, CONF_DEVICE_SN, CONF_DEVICE_NAME, CONF_HTTP_TOKEN, _LOGGER
     )
-    # Import API thật để sử dụng
     from .api import LumentreeHttpApiClient, AuthException, ApiException
 except ImportError:
     _LOGGER = logging.getLogger(__name__)
-    _LOGGER.warning("Could not import constants or API, using fallback definitions for Config Flow.")
-    DOMAIN = "lumentree"; CONF_QR_CONTENT = "qr_content"; CONF_DEVICE_ID = "device_id"
-    CONF_DEVICE_SN = "device_sn"; CONF_DEVICE_NAME = "device_name"; CONF_USER_ID = "user_id"
-    CONF_HTTP_TOKEN = "http_token"; AUTH_METHOD_GUEST = "guest"; CONF_AUTH_METHOD = "auth_method"
+    _LOGGER.warning("ImportError config_flow.py: Using fallback definitions.")
+    DOMAIN = "lumentree"; CONF_DEVICE_ID = "device_id"; CONF_DEVICE_SN = "device_sn"; CONF_DEVICE_NAME = "device_name"; CONF_HTTP_TOKEN = "http_token"
     class LumentreeHttpApiClient:
         def __init__(self, session): pass
-        # Sửa fallback để trả về 3 giá trị (token có thể là None)
-        async def authenticate_guest(self, qr): return None, None, None
-        async def get_device_info(self, dev_id): return {}
-        # Thêm fallback cho set_token
+        async def authenticate_device(self, device_id): return "fallback_token"
+        async def get_device_info(self, dev_id): return {"deviceId": dev_id, "deviceType": "Fallback Model"}
         def set_token(self, token): pass
     class AuthException(Exception): pass
     class ApiException(Exception): pass
 
-
 class LumentreeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for Lumentree (Handles HTTP Token)."""
-    VERSION = 1
+    """Config flow for Lumentree (Device ID based auth)."""
+    VERSION = 1; CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
+    def __init__(self) -> None: self._device_id_input: Optional[str] = None; self._http_token: Optional[str] = None; self._device_sn_from_api: Optional[str] = None; self._device_name: Optional[str] = None; self._api_client: Optional[LumentreeHttpApiClient] = None; self._reauth_entry: Optional[config_entries.ConfigEntry] = None
 
-    def __init__(self) -> None:
-        """Initialize."""
-        self._qr_content: Optional[str] = None
-        self._user_id: Optional[int] = None
-        self._device_id: Optional[str] = None
-        self._http_token: Optional[str] = None # <<< Thêm biến lưu token tạm thời
-        self._device_sn: Optional[str] = None
-        self._device_name: Optional[str] = None
-        self._api_client: Optional[LumentreeHttpApiClient] = None
-
+    # --- SỬA HÀM NÀY ---
     async def _get_api_client(self) -> LumentreeHttpApiClient:
-        """Get or create HTTP API client."""
-        if not self._api_client:
-            self._api_client = LumentreeHttpApiClient(async_get_clientsession(self.hass))
-        # Gán token vào client nếu đã có (quan trọng cho bước confirm)
-        # Cần đảm bảo lớp API thật có hàm set_token
-        if self._http_token and hasattr(self._api_client, "set_token"):
-             self._api_client.set_token(self._http_token)
+        """Get or create HTTP API client, ensuring it's not None."""
+        _LOGGER.debug("Attempting to get API client instance...")
+        if self._api_client is None:
+            _LOGGER.debug("API client is None, creating new instance.")
+            try:
+                session = async_get_clientsession(self.hass)
+                if session is None:
+                    _LOGGER.error("Failed to get aiohttp client session!")
+                    raise ApiException("Could not get client session") # Raise exception
+
+                # Tạo instance trong try/except riêng
+                try:
+                    self._api_client = LumentreeHttpApiClient(session)
+                    _LOGGER.debug(f"Created new API client instance: {type(self._api_client)}")
+                except Exception as create_exc:
+                     _LOGGER.exception("Error creating LumentreeHttpApiClient instance!")
+                     raise ApiException("Failed to create API client instance") from create_exc
+
+            except Exception as session_exc:
+                 # Bắt lỗi từ get session hoặc lỗi tạo client
+                 _LOGGER.error(f"Failed to initialize API client: {session_exc}")
+                 # Raise ApiException để báo lỗi cho các bước sau
+                 raise ApiException(f"API Client Initialization failed: {session_exc}") from session_exc
+        else:
+             _LOGGER.debug(f"Reusing existing API client instance: {type(self._api_client)}")
+
+        # Kiểm tra lại lần nữa trước khi set token và return
+        if self._api_client is None:
+            # Trường hợp này không nên xảy ra nếu logic trên đúng
+            _LOGGER.critical("API client is unexpectedly None after initialization attempt!")
+            raise ApiException("API client is None after creation attempt")
+
+        # Gán token nếu có
+        if self._http_token:
+             if hasattr(self._api_client, "set_token"):
+                 self._api_client.set_token(self._http_token)
+                 _LOGGER.debug("Set token on API client.")
+             else:
+                 _LOGGER.warning("API client (or fallback) missing 'set_token' method.")
+
         return self._api_client
+    # --- HẾT PHẦN SỬA ---
 
     async def async_step_user(self, user_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Handle the initial step."""
-        return await self.async_step_guest()
-
-    async def async_step_guest(self, user_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Handle guest login via QR content."""
-        errors: Dict[str, str] = {}
+        errors: Dict[str, str] = {}; api: Optional[LumentreeHttpApiClient] = None # Khởi tạo api là None
         if user_input is not None:
-            self._qr_content = user_input[CONF_QR_CONTENT]
-            # Luôn tạo client mới ở bước này để đảm bảo không dùng token cũ (nếu có lỗi trước đó)
-            self._api_client = LumentreeHttpApiClient(async_get_clientsession(self.hass))
-            api = self._api_client # Dùng client vừa tạo
-
+            self._device_id_input = user_input[CONF_DEVICE_ID].strip()
             try:
-                # <<< Sửa lại để nhận cả 3 giá trị >>>
-                uid, device_id_qr, http_token = await api.authenticate_guest(self._qr_content)
-                if uid is None or device_id_qr is None:
-                    _LOGGER.error("Failed to retrieve UID or DeviceID after guest login attempt.")
-                    raise AuthException("Failed to retrieve UID or DeviceID.")
-
-                self._user_id = uid
-                self._device_id = device_id_qr
-                self._http_token = http_token # <<< Lưu token lại
-
-                _LOGGER.info(f"Guest login successful. UID: {self._user_id}, DeviceID: {self._device_id}, Token {'found' if http_token else 'not found'}.")
-
-                # <<< Gán token vào API client ngay lập tức để dùng cho bước confirm >>>
-                if hasattr(api, "set_token"):
-                     api.set_token(self._http_token)
-                else:
-                     _LOGGER.warning("API client does not have set_token method (using fallback?).")
-
-                # Chuyển sang bước xác nhận thiết bị
+                # Lấy API client, hàm này giờ sẽ raise ApiException nếu thất bại
+                api = await self._get_api_client()
+                _LOGGER.info(f"Authenticating with Device ID: {self._device_id_input}")
+                token = await api.authenticate_device(self._device_id_input) # Gọi method trên instance đã được xác nhận khác None
+                self._http_token = token
+                _LOGGER.info(f"Auth success for {self._device_id_input}.")
                 return await self.async_step_confirm_device()
+            except AuthException as exc: _LOGGER.warning(f"Auth failed {self._device_id_input}: {exc}"); errors["base"] = "invalid_auth"
+            except ApiException as exc: _LOGGER.error(f"API conn/init error auth {self._device_id_input}: {exc}"); errors["base"] = "cannot_connect"
+            except Exception as exc: _LOGGER.exception(f"Unexpected auth error {self._device_id_input}: {exc}"); errors["base"] = "unknown" # Bắt lỗi khác nếu có
 
-            except AuthException as exc:
-                errors["base"] = "invalid_guest_auth"
-                _LOGGER.warning(f"Guest auth error: {exc}")
-            except ApiException as exc:
-                errors["base"] = "cannot_connect"
-                _LOGGER.error(f"API connection error during guest auth: {exc}")
-            except Exception:
-                _LOGGER.exception("Unexpected error during guest login")
-                errors["base"] = "unknown"
+        schema = vol.Schema({vol.Required(CONF_DEVICE_ID, default=self._device_id_input or ""): str})
+        # Nếu có lỗi, hiển thị lại form user
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
-        # Hiển thị lại form nếu có lỗi
-        return self.async_show_form(
-            step_id="guest",
-            data_schema=vol.Schema({vol.Required(CONF_QR_CONTENT, default=self._qr_content or ""): str}),
-            description_placeholders={"qr_example": '{"devices":"P...","expiryTime":"..."}'},
-            errors=errors,
-        )
 
     async def async_step_confirm_device(self, user_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Confirm device info and create entry."""
-        errors: Dict[str, str] = {}
-        # Lấy client đã có token (nếu set_token thành công ở bước trước)
-        api = await self._get_api_client()
+        errors: Dict[str, str] = {}; api: Optional[LumentreeHttpApiClient] = None
+        if not self._http_token: _LOGGER.error("Token missing"); return self.async_abort(reason="token_missing")
 
-        if user_input is None: # Lần đầu hiển thị form xác nhận
-            if not self._device_id:
-                 _LOGGER.error("Device ID not available in confirm step. Aborting.")
-                 return self.async_abort(reason="missing_device_id")
+        try: # Thêm try bao quanh việc lấy api client ở bước này
+            api = await self._get_api_client() # Lấy client (đã có token được set bên trong)
+        except ApiException as exc: # Bắt lỗi nếu không lấy được client ở bước confirm
+             _LOGGER.error(f"Failed to get API client in confirm step: {exc}")
+             errors["base"] = "cannot_connect"
+             # Hiển thị lại form user nếu không có client? Hoặc abort? Tạm hiển thị lỗi confirm
+             return self.async_show_form(step_id="confirm_device", description_placeholders={"device_name":"Error", "device_sn":"Error"}, errors=errors)
 
+        if user_input is None:
+            if not self._device_id_input: _LOGGER.error("Device ID missing"); return self.async_abort(reason="cannot_connect")
             try:
-                _LOGGER.debug(f"Calling get_device_info for ID: {self._device_id}")
-                # Gọi API deviceInfo (nên dùng token nếu có)
-                device_info = await api.get_device_info(self._device_id)
+                _LOGGER.info(f"Fetching device info for {self._device_id_input} via API..."); device_info_api = await api.get_device_info(self._device_id_input) # api chắc chắn không None ở đây
+                if "_error" in device_info_api: api_error = device_info_api["_error"]; _LOGGER.error(f"API error get info: {api_error}"); errors["base"] = "invalid_auth" if "Auth" in api_error else "cannot_connect_deviceinfo"; return self.async_show_form(step_id="confirm_device", description_placeholders={"device_name":"Err", "device_sn":"Err"}, errors=errors)
 
-                if "_error" in device_info or not device_info:
-                    _LOGGER.warning(f"Could not get device info for {self._device_id}. Using Device ID as SN.")
-                    self._device_sn = self._device_id
-                    self._device_name = f"Device {self._device_id}"
-                else:
-                    self._device_sn = device_info.get("sn") or self._device_id
-                    self._device_name = device_info.get("remarkName") or device_info.get("alias") or f"Device {self._device_sn}"
-                    _LOGGER.info(f"Device Info retrieved: SN='{self._device_sn}', Name='{self._device_name}'")
+                self._device_sn_from_api = device_info_api.get("deviceId")
+                if not self._device_sn_from_api: _LOGGER.warning(f"deviceId not found for {self._device_id_input}. Using input ID."); self._device_sn_from_api = self._device_id_input
+                elif self._device_sn_from_api != self._device_id_input: _LOGGER.warning(f"API deviceId '{self._device_sn_from_api}' differs from input '{self._device_id_input}'. Using API ID.")
 
-                # Đặt unique_id dựa trên SN
-                await self.async_set_unique_id(self._device_sn)
-                # Kiểm tra nếu SN đã được cấu hình, cho phép cập nhật tên
-                self._abort_if_unique_id_configured(updates={CONF_DEVICE_NAME: self._device_name})
+                self._device_name = device_info_api.get("remarkName") or device_info_api.get("deviceType") or f"Lumentree {self._device_sn_from_api}"
+                _LOGGER.info(f"Device Info: ID/SN='{self._device_sn_from_api}', Name='{self._device_name}', Type='{device_info_api.get('deviceType')}'")
 
-                # Hiển thị form xác nhận
-                return self.async_show_form(
-                    step_id="confirm_device",
-                    description_placeholders={CONF_DEVICE_NAME: self._device_name, CONF_DEVICE_SN: self._device_sn},
-                    errors={},
-                )
-            except (ApiException, AuthException) as exc:
-                 _LOGGER.error(f"Error fetching device info: {exc}")
-                 errors["base"] = "cannot_connect_deviceinfo"
-            except Exception:
-                _LOGGER.exception("Unexpected error during device confirmation")
-                errors["base"] = "unknown"
+                await self.async_set_unique_id(self._device_sn_from_api)
+                updates = {CONF_DEVICE_NAME: self._device_name, CONF_DEVICE_ID: self._device_id_input, CONF_HTTP_TOKEN: self._http_token}
+                if self._reauth_entry: pass
+                else: self._abort_if_unique_id_configured(updates=updates)
 
-            # Hiển thị lại form lỗi nếu không lấy được device info
-            return self.async_show_form(
-                step_id="confirm_device",
-                description_placeholders={CONF_DEVICE_NAME: "Error", CONF_DEVICE_SN: "Unknown"},
-                errors=errors,
-            )
+                return self.async_show_form(step_id="confirm_device", description_placeholders={CONF_DEVICE_NAME: self._device_name, CONF_DEVICE_SN: self._device_sn_from_api}, errors={})
+            except AuthException as exc: _LOGGER.error(f"Auth error get info {self._device_id_input}: {exc}"); errors["base"] = "invalid_auth"
+            except ApiException as exc: _LOGGER.error(f"API error get info {self._device_id_input}: {exc}"); errors["base"] = "cannot_connect_deviceinfo"
+            except Exception: _LOGGER.exception(f"Unexpected confirm error {self._device_id_input}"); errors["base"] = "unknown"
+            return self.async_show_form(step_id="confirm_device", description_placeholders={"device_name":"Err", "device_sn":"Err"}, errors=errors)
 
-        # Người dùng nhấn Submit trên form xác nhận -> Tạo entry
-        config_data = {
-            CONF_AUTH_METHOD: AUTH_METHOD_GUEST,
-            CONF_DEVICE_ID: self._device_id,
-            CONF_DEVICE_SN: self._device_sn,
-            CONF_DEVICE_NAME: self._device_name,
-            CONF_USER_ID: self._user_id,
-            CONF_HTTP_TOKEN: self._http_token, # <<< LƯU TOKEN HTTP VÀO ENTRY DATA
-        }
-        _LOGGER.info(f"Creating config entry for SN: {self._device_sn}")
-        # title dùng device_name cho dễ nhìn, data chứa thông tin đầy đủ
-        return self.async_create_entry(title=self._device_name, data=config_data)
+        config_data = {CONF_DEVICE_ID: self._device_id_input, CONF_DEVICE_SN: self._device_sn_from_api, CONF_DEVICE_NAME: self._device_name, CONF_HTTP_TOKEN: self._http_token}
+        if self._reauth_entry:
+            _LOGGER.info(f"Updating entry {self._reauth_entry.entry_id} for {self._device_sn_from_api} reauth."); self.hass.config_entries.async_update_entry(self._reauth_entry, data=config_data)
+            await self.hass.config_entries.async_reload(self._reauth_entry.entry_id); return self.async_abort(reason="reauth_successful")
+        _LOGGER.info(f"Creating new entry for SN/ID: {self._device_sn_from_api}"); return self.async_create_entry(title=self._device_name, data=config_data)
+
+    async def async_step_reauth(self, user_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        _LOGGER.info("Reauth flow started."); self._reauth_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if not self._reauth_entry: return self.async_abort(reason="unknown_entry")
+        self._device_id_input = self._reauth_entry.data.get(CONF_DEVICE_ID)
+        if not self._device_id_input: _LOGGER.error(f"Cannot reauth {self._reauth_entry.entry_id}: Device ID missing."); return self.async_abort(reason="missing_device_id")
+        self._http_token = None; self._api_client = None; return await self.async_step_user(user_input={CONF_DEVICE_ID: self._device_id_input})
