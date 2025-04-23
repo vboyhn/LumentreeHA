@@ -1,5 +1,6 @@
 # /config/custom_components/lumentree/__init__.py
 # Final version - Fixed NameError: name 'callback' is not defined
+# MODIFIED: Disabled battery cell MQTT request
 
 import asyncio
 import time
@@ -8,6 +9,7 @@ import ssl
 import logging
 from contextlib import suppress
 from functools import partial
+from typing import Optional, Callable # Added Callable for type hint
 
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -44,7 +46,7 @@ except ImportError as import_err:
         async def connect(self): _LOGGER.warning("Using fallback MQTT connect"); await asyncio.sleep(0)
         async def disconnect(self): _LOGGER.warning("Using fallback MQTT disconnect"); await asyncio.sleep(0)
         async def async_request_data(self): _LOGGER.warning("Using fallback MQTT request_data"); await asyncio.sleep(0)
-        async def async_request_battery_cells(self): _LOGGER.warning("Using fallback MQTT request_cells"); await asyncio.sleep(0)
+        # async def async_request_battery_cells(self): _LOGGER.warning("Using fallback MQTT request_cells"); await asyncio.sleep(0) # Keep commented if needed
         @property
         def is_connected(self) -> bool: return False
 
@@ -150,7 +152,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             active_mqtt_client = entry_data.get("mqtt_client")
             if not isinstance(active_mqtt_client, LumentreeMqttClient) or not active_mqtt_client.is_connected: _LOGGER.warning(f"MQTT {device_sn} not ready."); return
-            try: _LOGGER.debug(f"Req MQTT {device_sn}..."); await active_mqtt_client.async_request_data(); await active_mqtt_client.async_request_battery_cells(); _LOGGER.debug(f"MQTT req sent {device_sn}.")
+            try:
+                _LOGGER.debug(f"Req MQTT (main data) {device_sn}...")
+                await active_mqtt_client.async_request_data()
+                # --- DISABLED BATTERY CELL REQUEST ---
+                # await active_mqtt_client.async_request_battery_cells()
+                # --- END DISABLED ---
+                _LOGGER.debug(f"MQTT req sent {device_sn}.")
             except Exception as poll_err: _LOGGER.error(f"MQTT poll error {device_sn}: {poll_err}")
 
         remove_interval = async_track_time_interval(hass, _async_poll_data, polling_interval)
@@ -188,13 +196,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except ConfigEntryNotReady as e:
         _LOGGER.warning(f"Setup failed {entry.title}: {e}. Cleanup...")
         if isinstance(mqtt_client, LumentreeMqttClient): await mqtt_client.disconnect()
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        if entry.entry_id in hass.data.get(DOMAIN, {}):
+             hass.data[DOMAIN].pop(entry.entry_id, None)
         raise
     except Exception as final_exception:
         _LOGGER.exception(f"Unexpected setup error {entry.title}")
         if isinstance(mqtt_client, LumentreeMqttClient): await mqtt_client.disconnect()
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-        return False
+        if entry.entry_id in hass.data.get(DOMAIN, {}):
+            hass.data[DOMAIN].pop(entry.entry_id, None)
+        return False # Indicate setup failure
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.info(f"Unloading Lumentree: {entry.title} (SN/ID: {entry.data.get(CONF_DEVICE_SN)})")
@@ -202,7 +212,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if entry_data:
         mqtt_client = entry_data.get("mqtt_client")
-        if isinstance(mqtt_client, LumentreeMqttClient): _LOGGER.debug(f"Disconnecting MQTT {entry.data.get(CONF_DEVICE_SN)}."); hass.async_create_task(mqtt_client.disconnect())
+        if isinstance(mqtt_client, LumentreeMqttClient):
+             _LOGGER.debug(f"Disconnecting MQTT {entry.data.get(CONF_DEVICE_SN)}.");
+             # Ensure disconnect task runs even during unload
+             hass.async_create_task(mqtt_client.disconnect())
         _LOGGER.debug(f"Removed entry data {entry.entry_id}.")
     else: _LOGGER.warning(f"No entry data {entry.entry_id} to clean.")
     _LOGGER.info(f"Unload {entry.title}: {'OK' if unload_ok else 'Failed'}.")
