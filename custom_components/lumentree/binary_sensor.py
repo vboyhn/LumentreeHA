@@ -15,12 +15,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-#from homeassistant.helpers.template import slugify
+from homeassistant.util import slugify
 
 try:
     from .const import (
         DOMAIN, _LOGGER, CONF_DEVICE_SN, CONF_DEVICE_NAME, SIGNAL_UPDATE_FORMAT,
-        KEY_ONLINE_STATUS, KEY_IS_UPS_MODE, slugify
+        KEY_ONLINE_STATUS, KEY_IS_UPS_MODE
     )
 except ImportError:
     DOMAIN = "lumentree"; _LOGGER = logging.getLogger(__name__)
@@ -95,3 +95,4 @@ class LumentreeBinarySensor(BinarySensorEntity):
             self._remove_dispatcher = None
 
         _LOGGER.debug(f"Binary sensor {self.unique_id} unregistered.")
+
