@@ -117,10 +117,3 @@ KEY_LAST_RAW_MQTT: Final = "last_raw_mqtt_hex"
 
 MAP_BATTERY_TYPE: Final = {2: "No Battery"}
 
-def slugify(text: str) -> str:
-    """Convert text to a slug."""
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9_]+", "_", text)
-    text = re.sub(r"_{2,}", "_", text) # Replace multiple underscores with one
-    text = text.strip("_")
-    return text
