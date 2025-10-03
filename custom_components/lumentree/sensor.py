@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator
 )
-from homeassistant.helpers.template import slugify
+#from homeassistant.helpers.template import slugify
 
 try:
     from .const import (
@@ -37,7 +37,7 @@ try:
         KEY_BATTERY_CELL_INFO,
         KEY_DAILY_PV_KWH, KEY_DAILY_CHARGE_KWH, KEY_DAILY_DISCHARGE_KWH,
         KEY_DAILY_GRID_IN_KWH, KEY_DAILY_LOAD_KWH,
-        KEY_LAST_RAW_MQTT
+        KEY_LAST_RAW_MQTT,slugify
     )
     from .coordinator_stats import LumentreeStatsCoordinator
 except ImportError:
@@ -47,7 +47,7 @@ except ImportError:
     KEY_BATTERY_STATUS="battery_status"; KEY_GRID_STATUS="grid_status"; KEY_AC_IN_VOLTAGE="ac_input_voltage"; KEY_AC_IN_FREQ="ac_input_frequency"; KEY_AC_IN_POWER="ac_input_power"; KEY_BATTERY_TYPE="battery_type"; KEY_MASTER_SLAVE_STATUS="master_slave_status"; KEY_MQTT_DEVICE_SN="mqtt_device_sn"; KEY_BATTERY_CELL_INFO="battery_cell_info"
     KEY_DAILY_PV_KWH="pv_today"; KEY_DAILY_CHARGE_KWH="charge_today"; KEY_DAILY_DISCHARGE_KWH="discharge_today"; KEY_DAILY_GRID_IN_KWH="grid_in_today"; KEY_DAILY_LOAD_KWH="load_today"
     class LumentreeStatsCoordinator: pass
-    def slugify(text): return re.sub(r"[^a-z0-9_]+", "_", text.lower())
+    def slugify(text: str) -> str: return re.sub(r"[^a-z0-9_]+", "_", text.lower()) # Fallback definition
 
 
 # --- Sensor Descriptions (MQTT Realtime - Chỉ chứa các key đọc được từ 0-94) ---
@@ -222,4 +222,5 @@ class LumentreeDailyStatsSensor(CoordinatorEntity[LumentreeStatsCoordinator], Se
     def _handle_coordinator_update(self) -> None: self._update_state_from_coordinator(); self.async_write_ha_state(); _LOGGER.debug(f"Stats sensor {self.entity_id} updated.")
     def _update_state_from_coordinator(self) -> None: key = self.entity_description.key; value = self.coordinator.data.get(key) if self.coordinator.data else None; self._attr_native_value = round(value, 2) if isinstance(value, (int, float)) else None
     @property
+
     def available(self) -> bool: return self.coordinator.last_update_success
