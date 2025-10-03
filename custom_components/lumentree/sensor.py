@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator
 )
-from homeassistant.helpers.template import slugify
+#from homeassistant.helpers.template import slugify
 
 try:
     from .const import (
@@ -222,4 +222,5 @@ class LumentreeDailyStatsSensor(CoordinatorEntity[LumentreeStatsCoordinator], Se
     def _handle_coordinator_update(self) -> None: self._update_state_from_coordinator(); self.async_write_ha_state(); _LOGGER.debug(f"Stats sensor {self.entity_id} updated.")
     def _update_state_from_coordinator(self) -> None: key = self.entity_description.key; value = self.coordinator.data.get(key) if self.coordinator.data else None; self._attr_native_value = round(value, 2) if isinstance(value, (int, float)) else None
     @property
+
     def available(self) -> bool: return self.coordinator.last_update_success
