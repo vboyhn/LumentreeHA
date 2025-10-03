@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator
 )
-#from homeassistant.helpers.template import slugify
+from homeassistant.util import slugify
 
 try:
     from .const import (
@@ -37,7 +37,7 @@ try:
         KEY_BATTERY_CELL_INFO,
         KEY_DAILY_PV_KWH, KEY_DAILY_CHARGE_KWH, KEY_DAILY_DISCHARGE_KWH,
         KEY_DAILY_GRID_IN_KWH, KEY_DAILY_LOAD_KWH,
-        KEY_LAST_RAW_MQTT, slugify
+        KEY_LAST_RAW_MQTT
     )
     from .coordinator_stats import LumentreeStatsCoordinator
 except ImportError:
@@ -224,3 +224,4 @@ class LumentreeDailyStatsSensor(CoordinatorEntity[LumentreeStatsCoordinator], Se
     @property
 
     def available(self) -> bool: return self.coordinator.last_update_success
+
