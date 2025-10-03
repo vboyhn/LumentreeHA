@@ -15,19 +15,19 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.template import slugify
+#from homeassistant.helpers.template import slugify
 
 try:
     from .const import (
         DOMAIN, _LOGGER, CONF_DEVICE_SN, CONF_DEVICE_NAME, SIGNAL_UPDATE_FORMAT,
-        KEY_ONLINE_STATUS, KEY_IS_UPS_MODE
+        KEY_ONLINE_STATUS, KEY_IS_UPS_MODE, slugify
     )
 except ImportError:
     DOMAIN = "lumentree"; _LOGGER = logging.getLogger(__name__)
     CONF_DEVICE_SN = "device_sn"; CONF_DEVICE_NAME = "device_name"
     SIGNAL_UPDATE_FORMAT = "lumentree_mqtt_update_{device_sn}"
     KEY_IS_UPS_MODE = "is_ups_mode"; KEY_ONLINE_STATUS="online_status"
-    def slugify(text): return re.sub(r"[^a-z0-9_]+", "_", text.lower())
+    def slugify(text: str) -> str: return re.sub(r"[^a-z0-9_]+", "_", text.lower())
 
 
 BINARY_SENSOR_DESCRIPTIONS: tuple[BinarySensorEntityDescription, ...] = (
@@ -93,4 +93,5 @@ class LumentreeBinarySensor(BinarySensorEntity):
         if self._remove_dispatcher:
             self._remove_dispatcher()
             self._remove_dispatcher = None
+
         _LOGGER.debug(f"Binary sensor {self.unique_id} unregistered.")
