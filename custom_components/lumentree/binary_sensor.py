@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.template import slugify
+#from homeassistant.helpers.template import slugify
 
 try:
     from .const import (
@@ -93,4 +93,5 @@ class LumentreeBinarySensor(BinarySensorEntity):
         if self._remove_dispatcher:
             self._remove_dispatcher()
             self._remove_dispatcher = None
+
         _LOGGER.debug(f"Binary sensor {self.unique_id} unregistered.")
