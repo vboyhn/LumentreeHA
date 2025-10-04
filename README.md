@@ -15,15 +15,6 @@ Connect Lumentree solar inverter to Home Asstistant
 - Khởi động lại HA của bạn
 - Thêm thiết bị lumentree, sử dụng số seri để đăng nhập.
 
-
-# Future
-- Make change setting avaiable.
-- Use ESP32 to read and setting your Inverter in local (no need connect to Lumentree server, no need internet)
-- ...
-
-# Tương lai
-- Thực hiện thay đổi cài đặt biến tần bằng HA.
-- Sử dụng ESP32 để đọc và cài đặt Biến tần (không cần kết nối với máy chủ Lumentree, không cần internet)
-- ...
-
-* Bạn nào có hứng thú thì cùng nghiên cứu với mình nhé!!!
+*** Hiện tại đã có thể kết nối nội bộ tới biến tần mà không cần dùng internet, 
+các bạn có thể tham khảo ở đây: https://github.com/syssi/esphome-lumentree
+- Cần có ESP32 để kết nối bluetooth vào biến tần và đưa trực tiếp lên HA.
